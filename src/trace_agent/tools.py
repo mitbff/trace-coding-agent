@@ -55,6 +55,82 @@ class ToolRuntime:
         truncated = len(text) > self.max_output_chars
         return {"path": path, "content": text[: self.max_output_chars], "truncated": truncated}
 
+    def search_code(
+        self,
+        query: str,
+        path: str = ".",
+        case_sensitive: bool = False,
+        max_results: int = 50,
+    ) -> dict[str, Any]:
+        if not query:
+            raise ToolError("query must not be empty")
+        root = self._path(path)
+        if not root.is_dir():
+            raise ToolError(f"path is not a directory: {path}")
+        limit = max(1, min(max_results, 100))
+        excluded_dirs = {
+            ".git",
+            ".trace-agent",
+            ".venv",
+            "venv",
+            "node_modules",
+            "__pycache__",
+            ".pytest_cache",
+        }
+        binary_suffixes = {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".pdf",
+            ".zip",
+            ".exe",
+            ".dll",
+            ".so",
+            ".pyc",
+            ".db",
+            ".sqlite",
+        }
+        needle = query if case_sensitive else query.casefold()
+        matches: list[dict[str, Any]] = []
+        output_chars = 0
+        truncated = False
+        candidates = [root] if root.is_file() else root.rglob("*")
+        for file_path in candidates:
+            if not file_path.is_file():
+                continue
+            relative = file_path.relative_to(self.workspace)
+            if any(part in excluded_dirs for part in relative.parts):
+                continue
+            if file_path.suffix.casefold() in binary_suffixes or file_path.stat().st_size > 1_000_000:
+                continue
+            try:
+                lines = file_path.read_text(encoding="utf-8").splitlines()
+            except (UnicodeDecodeError, OSError):
+                continue
+            for line_number, line in enumerate(lines, start=1):
+                haystack = line if case_sensitive else line.casefold()
+                if needle not in haystack:
+                    continue
+                excerpt = line[:500]
+                estimated_chars = len(relative.as_posix()) + len(excerpt) + 32
+                if len(matches) >= limit or output_chars + estimated_chars > self.max_output_chars:
+                    truncated = True
+                    break
+                matches.append(
+                    {"path": relative.as_posix(), "line": line_number, "text": excerpt}
+                )
+                output_chars += estimated_chars
+            if truncated:
+                break
+        return {
+            "query": query,
+            "path": path,
+            "matches": matches,
+            "count": len(matches),
+            "truncated": truncated,
+        }
+
     def write_file(self, path: str, content: str) -> dict[str, Any]:
         file_path = self._path(path)
         before = file_path.read_text(encoding="utf-8") if file_path.is_file() else ""
@@ -140,6 +216,23 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "search_code",
+            "description": "Search UTF-8 project files and return matching paths, line numbers, and lines.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "path": {"type": "string", "description": "Relative directory path"},
+                    "case_sensitive": {"type": "boolean"},
+                    "max_results": {"type": "integer", "minimum": 1, "maximum": 100},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "replace_text",
             "description": (
                 "Replace one exact, unique text fragment in a UTF-8 file. "
@@ -200,6 +293,7 @@ class ToolRouter:
         self._tools: dict[str, Callable[..., dict[str, Any]]] = {
             "list_files": runtime.list_files,
             "read_file": runtime.read_file,
+            "search_code": runtime.search_code,
             "write_file": runtime.write_file,
             "replace_text": runtime.replace_text,
             "run_command": runtime.run_command,

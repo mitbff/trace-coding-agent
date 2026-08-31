@@ -73,6 +73,44 @@ def test_reserved_memory_data_cannot_be_read(tmp_path):
     assert "reserved runtime data" in response["error"]
 
 
+def test_search_code_returns_file_line_and_text(tmp_path):
+    router = ToolRouter(ToolRuntime(tmp_path))
+    result(
+        router,
+        "write_file",
+        {"path": "src/calculator.py", "content": "def divide(a, b):\n    return a / b\n"},
+    )
+    result(
+        router,
+        "write_file",
+        {"path": "tests/check.py", "content": "from src.calculator import divide\n"},
+    )
+
+    response = result(router, "search_code", {"query": "divide"})
+
+    assert response["ok"] is True
+    assert response["result"]["count"] == 2
+    assert response["result"]["matches"][0] == {
+        "path": "src/calculator.py",
+        "line": 1,
+        "text": "def divide(a, b):",
+    }
+
+
+def test_search_code_excludes_runtime_data_and_limits_results(tmp_path):
+    router = ToolRouter(ToolRuntime(tmp_path))
+    result(router, "write_file", {"path": "a.py", "content": "token\ntoken\n"})
+    runtime_dir = tmp_path / ".trace-agent"
+    runtime_dir.mkdir()
+    (runtime_dir / "secret.txt").write_text("token", encoding="utf-8")
+
+    response = result(router, "search_code", {"query": "token", "max_results": 1})
+
+    assert response["result"]["count"] == 1
+    assert response["result"]["truncated"] is True
+    assert all(".trace-agent" not in match["path"] for match in response["result"]["matches"])
+
+
 def test_command_result_is_structured(tmp_path):
     router = ToolRouter(ToolRuntime(tmp_path))
 
