@@ -28,14 +28,33 @@ class RuntimeState:
     workspace_dirty: bool = False
     last_mutation_step: int | None = None
     last_verification_step: int | None = None
+    last_failed_signature: str | None = None
+    consecutive_failure_count: int = 0
 
-    def observe(self, step: int, tool_name: str, result_json: str) -> None:
+    def observe(self, step: int, tool_name: str, arguments_json: str, result_json: str) -> str:
         try:
             payload = json.loads(result_json)
         except json.JSONDecodeError:
-            return
+            self.last_failed_signature = None
+            self.consecutive_failure_count = 0
+            return result_json
         if not payload.get("ok"):
-            return
+            signature = self._failure_signature(tool_name, arguments_json, payload)
+            if signature == self.last_failed_signature:
+                self.consecutive_failure_count += 1
+            else:
+                self.last_failed_signature = signature
+                self.consecutive_failure_count = 1
+            if self.consecutive_failure_count >= 3:
+                payload["runtime_warning"] = (
+                    "RepeatedActionWarning: this same action has failed "
+                    f"{self.consecutive_failure_count} consecutive times. Inspect the workspace "
+                    "or choose a different approach instead of repeating it."
+                )
+                return json.dumps(payload, ensure_ascii=False)
+            return result_json
+        self.last_failed_signature = None
+        self.consecutive_failure_count = 0
         result = payload.get("result", {})
         if tool_name in {"write_file", "replace_text"} and result.get("changed", True):
             self.workspace_dirty = True
@@ -48,6 +67,17 @@ class RuntimeState:
         ):
             self.workspace_dirty = False
             self.last_verification_step = step
+        return result_json
+
+    @staticmethod
+    def _failure_signature(tool_name: str, arguments_json: str, payload: dict[str, Any]) -> str:
+        try:
+            arguments = json.loads(arguments_json or "{}")
+            canonical_arguments = json.dumps(arguments, ensure_ascii=False, sort_keys=True)
+        except json.JSONDecodeError:
+            canonical_arguments = arguments_json.strip()
+        error = " ".join(str(payload.get("error", "")).casefold().split())
+        return f"{tool_name}\0{canonical_arguments}\0{error}"
 
     @staticmethod
     def _is_verification_command(command: str) -> bool:
@@ -155,8 +185,10 @@ class Agent:
                         step, call.id, call.function.name, call.function.arguments
                     )
                 result = self.router.execute(call.function.name, call.function.arguments)
+                result = runtime.observe(
+                    step, call.function.name, call.function.arguments, result
+                )
                 self.trace(f"[TOOL RESULT] {result}")
-                runtime.observe(step, call.function.name, result)
                 if self.memory:
                     self.memory.record_tool_result(
                         step,

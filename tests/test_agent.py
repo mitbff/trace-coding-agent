@@ -170,3 +170,24 @@ def test_unverified_change_stops_at_step_limit():
     outcome = Agent(client, router, max_steps=2, trace=lambda _: None).run("Change app.py")
 
     assert outcome.stopped_by_limit is True
+
+
+def test_repeated_failure_adds_structured_warning_on_third_attempt():
+    repeated_call = tool_call("read_file", '{"path":"missing.py"}')
+    client = FakeClient(
+        [
+            FakeMessage(tool_calls=[repeated_call]),
+            FakeMessage(tool_calls=[repeated_call]),
+            FakeMessage(tool_calls=[repeated_call]),
+            FakeMessage(content="I will try another approach."),
+        ]
+    )
+    failure = '{"ok":false,"error":"file does not exist: missing.py"}'
+    router = ScriptedRouter([failure, failure, failure])
+
+    outcome = Agent(client, router, trace=lambda _: None).run("Inspect missing.py")
+
+    third_observation = client.received[3][-1]
+    assert outcome.steps == 4
+    assert third_observation["role"] == "tool"
+    assert "RepeatedActionWarning" in third_observation["content"]
