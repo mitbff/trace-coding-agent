@@ -108,3 +108,54 @@ def test_projects_are_isolated_in_shared_database(tmp_path):
     second = MemoryService(second_workspace, database=database, trace=lambda _: None)
 
     assert second.retrieve("calculator pytest command") == []
+
+
+def test_successful_verification_links_to_precise_code_change(tmp_path):
+    memory = MemoryService(tmp_path, mode="full", trace=lambda _: None)
+    task_id = memory.begin_task("Replace the faulty divide implementation and test it")
+    call = memory.record_tool_call(
+        1,
+        "replace-1",
+        "replace_text",
+        '{"path":"calculator.py","old_text":"a * b","new_text":"a / b"}',
+    )
+    memory.record_tool_result(
+        1,
+        "replace-1",
+        "replace_text",
+        tool_result(
+            path="calculator.py",
+            bytes_written=34,
+            before_hash="before123",
+            after_hash="after456",
+            changed=True,
+            diff="--- a/calculator.py\n+++ b/calculator.py\n-return a * b\n+return a / b\n",
+            diff_truncated=False,
+        ),
+        call,
+    )
+    call = memory.record_tool_call(2, "test-1", "run_command", '{"command":"pytest -q"}')
+    memory.record_tool_result(
+        2,
+        "test-1",
+        "run_command",
+        tool_result(
+            command="pytest -q",
+            exit_code=0,
+            stdout="1 passed",
+            stderr="",
+            truncated=False,
+        ),
+        call,
+    )
+    memory.finish_task("Fixed and verified.", "completed")
+
+    nodes = memory.store.task_nodes(task_id, "L1")
+    change = next(node for node in nodes if node.node_type == "code_change")
+    verification = next(node for node in nodes if node.node_type == "successful_command")
+    assert change.metadata["before_hash"] == "before123"
+    assert "return a / b" in change.metadata["diff"]
+    assert any(
+        node.node_id == change.node_id and relation == "VERIFIES"
+        for node, relation in memory.store.outgoing(verification.node_id)
+    )

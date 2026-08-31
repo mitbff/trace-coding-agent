@@ -27,16 +27,31 @@ class MemoryConsolidator:
             ok = bool(payload.get("ok"))
             result = payload.get("result", {}) if ok else {}
 
-            if tool_name == "write_file" and ok:
+            if tool_name in {"write_file", "replace_text"} and ok:
                 path = str(result.get("path", ""))
                 touched_files.add(path)
+                before_hash = str(result.get("before_hash", ""))
+                after_hash = str(result.get("after_hash", ""))
+                diff = str(result.get("diff", ""))
                 atomic = self._atomic(
                     trace,
                     event,
                     "code_change",
-                    f"Wrote {path} ({result.get('bytes_written', 0)} bytes).",
+                    (
+                        f"Changed {path} ({result.get('bytes_written', 0)} bytes). "
+                        f"Hash {before_hash[:12] or 'unknown'} -> {after_hash[:12] or 'unknown'}. "
+                        f"Diff: {diff[:500]}"
+                    ).strip(),
                     1.0,
-                    {"verified": False, "path": path},
+                    {
+                        "verified": False,
+                        "path": path,
+                        "tool_name": tool_name,
+                        "before_hash": before_hash,
+                        "after_hash": after_hash,
+                        "diff": diff,
+                        "diff_truncated": bool(result.get("diff_truncated", False)),
+                    },
                 )
                 self._link_entity(atomic, "File", path, "modified")
                 atomic_nodes.append(atomic)
@@ -60,18 +75,23 @@ class MemoryConsolidator:
                         "verified": succeeded,
                         "command": command,
                         "exit_code": exit_code,
-                        "test_command": self._is_test_command(command),
+                        "verification_command": self._is_verification_command(command),
                     },
                 )
                 self._link_entity(atomic, "Command", command, "executed")
-                if self._is_test_command(command):
+                if self._is_verification_command(command):
                     self._link_entity(atomic, "Test", command, "test_suite")
                 if not succeeded and (stderr or stdout):
                     error_name = self._error_name(stderr or stdout)
                     self._link_entity(atomic, "Error", error_name, "produced")
                 atomic_nodes.append(atomic)
 
-                if succeeded and self._is_test_command(command):
+                if succeeded and self._is_verification_command(command):
+                    for change in atomic_nodes:
+                        if change.node_type == "code_change":
+                            self._edge(atomic.node_id, change.node_id, "VERIFIES", trace.task_id)
+
+                if succeeded and self._is_verification_command(command):
                     project_memory = MemoryNode(
                         node_id=f"l3:{trace.task_id}:test-command",
                         project_id=trace.project_id,
@@ -175,9 +195,25 @@ class MemoryConsolidator:
         self.store.link_entity(node.node_id, entity.entity_id, role)
 
     @staticmethod
-    def _is_test_command(command: str) -> bool:
+    def _is_verification_command(command: str) -> bool:
         lowered = command.casefold()
-        return any(token in lowered for token in ("pytest", "unittest", "npm test", "cargo test", "go test"))
+        return any(
+            token in lowered
+            for token in (
+                "pytest",
+                "unittest",
+                "npm test",
+                "npm run test",
+                "cargo test",
+                "go test",
+                "build",
+                "lint",
+                "ruff",
+                "mypy",
+                "pyright",
+                "compileall",
+            )
+        ) or bool(re.search(r"(?:^|\s)(?:python|python3|py)\s+[^\s]+\.py(?:\s|$)", lowered))
 
     @staticmethod
     def _error_name(text: str) -> str:
