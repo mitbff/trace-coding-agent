@@ -27,6 +27,8 @@ class ToolRuntime:
             candidate.relative_to(self.workspace)
         except ValueError as exc:
             raise ToolError("path escapes the workspace") from exc
+        if ".trace-agent" in candidate.relative_to(self.workspace).parts:
+            raise ToolError("path targets reserved runtime data")
         return candidate
 
     def list_files(self, path: str = ".") -> dict[str, Any]:
@@ -37,7 +39,8 @@ class ToolRuntime:
             raise ToolError(f"path is not a directory: {path}")
         entries = []
         for item in sorted(root.rglob("*")):
-            if ".git" in item.parts or item.is_dir():
+            relative_parts = item.relative_to(self.workspace).parts
+            if ".git" in relative_parts or ".trace-agent" in relative_parts or item.is_dir():
                 continue
             entries.append(item.relative_to(self.workspace).as_posix())
         return {"path": path, "files": entries[:500], "truncated": len(entries) > 500}
@@ -153,4 +156,3 @@ class ToolRouter:
             return json.dumps({"ok": True, "result": tool(**arguments)}, ensure_ascii=False)
         except (ToolError, TypeError, json.JSONDecodeError, OSError) as exc:
             return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
-
