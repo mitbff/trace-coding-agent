@@ -29,6 +29,15 @@ def test_path_cannot_escape_workspace(tmp_path):
     assert "escapes the workspace" in response["error"]
 
 
+def test_reserved_memory_data_cannot_be_read(tmp_path):
+    router = ToolRouter(ToolRuntime(tmp_path))
+
+    response = result(router, "read_file", {"path": ".trace-agent/memory.db"})
+
+    assert response["ok"] is False
+    assert "reserved runtime data" in response["error"]
+
+
 def test_command_result_is_structured(tmp_path):
     router = ToolRouter(ToolRuntime(tmp_path))
 
@@ -45,4 +54,3 @@ def test_invalid_tool_arguments_become_observation(tmp_path):
     response = json.loads(router.execute("read_file", "not-json"))
 
     assert response["ok"] is False
-
