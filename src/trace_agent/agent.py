@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
@@ -19,6 +21,55 @@ class AgentResult:
     answer: str
     steps: int
     stopped_by_limit: bool = False
+
+
+@dataclass
+class RuntimeState:
+    workspace_dirty: bool = False
+    last_mutation_step: int | None = None
+    last_verification_step: int | None = None
+
+    def observe(self, step: int, tool_name: str, result_json: str) -> None:
+        try:
+            payload = json.loads(result_json)
+        except json.JSONDecodeError:
+            return
+        if not payload.get("ok"):
+            return
+        result = payload.get("result", {})
+        if tool_name in {"write_file", "replace_text"} and result.get("changed", True):
+            self.workspace_dirty = True
+            self.last_mutation_step = step
+        if (
+            tool_name == "run_command"
+            and self.workspace_dirty
+            and result.get("exit_code") == 0
+            and self._is_verification_command(str(result.get("command", "")))
+        ):
+            self.workspace_dirty = False
+            self.last_verification_step = step
+
+    @staticmethod
+    def _is_verification_command(command: str) -> bool:
+        lowered = command.casefold()
+        markers = (
+            "pytest",
+            "unittest",
+            "npm test",
+            "npm run test",
+            "cargo test",
+            "go test",
+            " test ",
+            "build",
+            "lint",
+            "ruff",
+            "mypy",
+            "pyright",
+            "compileall",
+        )
+        if any(marker in f" {lowered} " for marker in markers):
+            return True
+        return bool(re.search(r"(?:^|\s)(?:python|python3|py)\s+[^\s]+\.py(?:\s|$)", lowered))
 
 
 class AgentMemory(Protocol):
@@ -47,6 +98,7 @@ class Agent:
         self.memory = memory
 
     def run(self, task: str) -> AgentResult:
+        runtime = RuntimeState()
         memory_context = ""
         if self.memory:
             self.memory.begin_task(task)
@@ -80,6 +132,16 @@ class Agent:
 
             if not message.tool_calls:
                 answer = message.content or "Task finished without a final message."
+                if runtime.workspace_dirty:
+                    reminder = (
+                        "Runtime verification required: files were modified at step "
+                        f"{runtime.last_mutation_step}, but no successful test, build, lint, "
+                        "type-check, compile, or relevant program run has verified the changes. "
+                        "Use run_command to verify the workspace before finishing."
+                    )
+                    self.trace(f"[VERIFICATION REQUIRED]\n{reminder}")
+                    messages.append({"role": "system", "content": reminder})
+                    continue
                 self.trace(f"[FINAL]\n{answer}")
                 if self.memory:
                     self.memory.finish_task(answer, "completed")
@@ -94,6 +156,7 @@ class Agent:
                     )
                 result = self.router.execute(call.function.name, call.function.arguments)
                 self.trace(f"[TOOL RESULT] {result}")
+                runtime.observe(step, call.function.name, result)
                 if self.memory:
                     self.memory.record_tool_result(
                         step,

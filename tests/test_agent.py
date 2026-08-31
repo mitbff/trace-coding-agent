@@ -46,6 +46,14 @@ class RecordingRouter:
         return '{"ok": true, "result": {"files": ["app.py"]}}'
 
 
+class ScriptedRouter:
+    def __init__(self, responses):
+        self.responses = iter(responses)
+
+    def execute(self, name, arguments):
+        return next(self.responses)
+
+
 class MemoryItem:
     def as_context(self):
         return "l3:test (verified, score=0.900): Use pytest.\nSource: l0:test"
@@ -122,3 +130,43 @@ def test_agent_injects_and_records_memory():
     assert ("call", 1, "list_files") in memory.events
     assert ("result", 1, "list_files", "l0:call") in memory.events
     assert memory.events[-1] == ("finish", "completed")
+
+
+def test_agent_requires_verification_after_file_change():
+    client = FakeClient(
+        [
+            FakeMessage(tool_calls=[tool_call("replace_text")]),
+            FakeMessage(content="The fix is complete."),
+            FakeMessage(tool_calls=[tool_call("run_command", '{"command":"pytest"}')]),
+            FakeMessage(content="Fixed and verified."),
+        ]
+    )
+    router = ScriptedRouter(
+        [
+            '{"ok":true,"result":{"path":"app.py","changed":true}}',
+            '{"ok":true,"result":{"command":"pytest","exit_code":0}}',
+        ]
+    )
+
+    outcome = Agent(client, router, trace=lambda _: None).run("Fix app.py")
+
+    assert outcome.answer == "Fixed and verified."
+    assert outcome.steps == 4
+    assert any(
+        message["role"] == "system" and "verification required" in message["content"].casefold()
+        for message in client.received[2]
+    )
+
+
+def test_unverified_change_stops_at_step_limit():
+    client = FakeClient(
+        [
+            FakeMessage(tool_calls=[tool_call("write_file")]),
+            FakeMessage(content="Done without tests."),
+        ]
+    )
+    router = ScriptedRouter(['{"ok":true,"result":{"path":"app.py","changed":true}}'])
+
+    outcome = Agent(client, router, max_steps=2, trace=lambda _: None).run("Change app.py")
+
+    assert outcome.stopped_by_limit is True
