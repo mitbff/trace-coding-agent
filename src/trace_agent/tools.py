@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import difflib
+import hashlib
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,9 +57,47 @@ class ToolRuntime:
 
     def write_file(self, path: str, content: str) -> dict[str, Any]:
         file_path = self._path(path)
+        before = file_path.read_text(encoding="utf-8") if file_path.is_file() else ""
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content, encoding="utf-8")
-        return {"path": path, "bytes_written": len(content.encode("utf-8"))}
+        return self._change_result(path, before, content)
+
+    def replace_text(self, path: str, old_text: str, new_text: str) -> dict[str, Any]:
+        file_path = self._path(path)
+        if not file_path.is_file():
+            raise ToolError(f"file does not exist: {path}")
+        if not old_text:
+            raise ToolError("old_text must not be empty")
+        before = file_path.read_text(encoding="utf-8")
+        occurrences = before.count(old_text)
+        if occurrences == 0:
+            raise ToolError("old_text was not found; no changes were made")
+        if occurrences > 1:
+            raise ToolError(
+                f"old_text matched {occurrences} locations; provide a more specific match"
+            )
+        after = before.replace(old_text, new_text, 1)
+        file_path.write_text(after, encoding="utf-8")
+        return self._change_result(path, before, after)
+
+    def _change_result(self, path: str, before: str, after: str) -> dict[str, Any]:
+        diff = "".join(
+            difflib.unified_diff(
+                before.splitlines(keepends=True),
+                after.splitlines(keepends=True),
+                fromfile=f"a/{path}",
+                tofile=f"b/{path}",
+            )
+        )
+        return {
+            "path": path,
+            "bytes_written": len(after.encode("utf-8")),
+            "before_hash": hashlib.sha256(before.encode("utf-8")).hexdigest(),
+            "after_hash": hashlib.sha256(after.encode("utf-8")).hexdigest(),
+            "changed": before != after,
+            "diff": diff[: self.max_output_chars],
+            "diff_truncated": len(diff) > self.max_output_chars,
+        }
 
     def run_command(self, command: str) -> dict[str, Any]:
         if not command.strip():
@@ -94,6 +134,25 @@ TOOL_SCHEMAS = [
             "parameters": {
                 "type": "object",
                 "properties": {"path": {"type": "string", "description": "Relative directory path"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "replace_text",
+            "description": (
+                "Replace one exact, unique text fragment in a UTF-8 file. "
+                "Returns hashes and a unified diff; refuses ambiguous matches."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "old_text": {"type": "string"},
+                    "new_text": {"type": "string"},
+                },
+                "required": ["path", "old_text", "new_text"],
             },
         },
     },
@@ -142,6 +201,7 @@ class ToolRouter:
             "list_files": runtime.list_files,
             "read_file": runtime.read_file,
             "write_file": runtime.write_file,
+            "replace_text": runtime.replace_text,
             "run_command": runtime.run_command,
         }
 
