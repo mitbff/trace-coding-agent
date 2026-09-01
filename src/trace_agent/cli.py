@@ -3,16 +3,17 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .agent import Agent
 from .config import Settings
 from .llm import OpenAIModelClient
 from .memory import MemoryService
+from .repl import ChatREPL
+from .session import AgentSession
 from .tools import ToolRouter, ToolRuntime
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a transparent local coding agent")
-    parser.add_argument("task", help="Programming task for the agent")
+    parser.add_argument("task", nargs="?", help="Programming task; omit to start interactive chat")
     parser.add_argument("--workspace", default="workspace", help="Directory the agent may access")
     parser.add_argument("--max-steps", type=int, default=20, help="Maximum model turns")
     parser.add_argument(
@@ -58,12 +59,15 @@ def main() -> None:
             )
         except Exception as exc:
             print(f"[MEMORY WARNING] memory initialization failed; continuing without memory: {exc}")
-    result = Agent(
+    session = AgentSession(
         client,
         ToolRouter(runtime),
         settings.max_steps,
         memory=memory,
-    ).run(args.task)
+    )
+    if args.task is None:
+        raise SystemExit(ChatREPL(session).run())
+    result = session.send(args.task)
     if result.failed:
         raise SystemExit(1)
     raise SystemExit(2 if result.stopped_by_limit else 0)
