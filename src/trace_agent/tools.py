@@ -294,6 +294,7 @@ TOOL_SCHEMAS = [
 
 class ToolRouter:
     def __init__(self, runtime: ToolRuntime) -> None:
+        self.runtime = runtime
         self._tools: dict[str, Callable[..., dict[str, Any]]] = {
             "list_files": runtime.list_files,
             "read_file": runtime.read_file,
@@ -302,6 +303,10 @@ class ToolRouter:
             "replace_text": runtime.replace_text,
             "run_command": runtime.run_command,
         }
+
+    @property
+    def tool_names(self) -> tuple[str, ...]:
+        return tuple(self._tools)
 
     def execute(self, name: str, arguments_json: str) -> str:
         try:
