@@ -139,11 +139,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
-    args = build_parser().parse_args()
-    session = create_session(args.workspace, args.max_steps, args.memory, args.memory_db)
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(AgentWebApp(session)))
-    print(f"Trace Coding Agent UI: http://{args.host}:{args.port}")
+def serve(session: AgentSession, host: str = "127.0.0.1", port: int = 8765) -> int:
+    server = ThreadingHTTPServer((host, port), make_handler(AgentWebApp(session)))
+    print(f"Trace Coding Agent UI: http://{host}:{port}")
+    print("Open this address in your browser. Press Ctrl+C to stop the server.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -151,6 +150,13 @@ def main() -> None:
     finally:
         session.close()
         server.server_close()
+    return 0
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    session = create_session(args.workspace, args.max_steps, args.memory, args.memory_db)
+    raise SystemExit(serve(session, args.host, args.port))
 
 
 if __name__ == "__main__":

@@ -8,6 +8,10 @@
 trace-agent --workspace .\workspace --memory full
 ```
 
+未指定任务时，统一入口会在终端显示选项：`1` 进入 Chat REPL，`2` 启动本地 Web UI。Web 服务
+只输出访问地址，不主动调用或控制浏览器。自动化脚本可使用 `--interface terminal` 或
+`--interface web` 跳过选择。
+
 程序只创建一个 `AgentSession`。同一进程中的所有用户任务共享对话历史，每轮任务单独创建
 `RuntimeState` 和长期记忆任务。这样可以继续讨论上一轮代码，同时避免“待验证”状态和失败
 计数串到下一轮。

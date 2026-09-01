@@ -10,18 +10,33 @@ OpenAI 兼容接口调用大语言模型，在本地读取和修改代码、执�
 ## 系统架构
 
 ```mermaid
-flowchart TD
-    U[用户任务] --> M[记忆检索]
-    M --> C[Context]
-    C --> A[Agent Controller]
-    A --> L[LLM Client]
-    L -->|Tool Call 或 Final Answer| A
-    A --> R[Tool Router]
-    R --> T[本地工具]
-    T -->|Tool Result| A
-    A --> W[Trace Recorder]
-    W --> D[(SQLite Memory Graph)]
-    D --> M
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#f4f4f2','primaryTextColor':'#202124','primaryBorderColor':'#6b6f72','lineColor':'#606468','secondaryColor':'#e8eeeb','tertiaryColor':'#fafafa','clusterBkg':'#fafafa','clusterBorder':'#a5aaad','fontFamily':'Arial, sans-serif'}}}%%
+flowchart LR
+    U[用户任务]
+    subgraph CORE[Agent Runtime]
+        direction LR
+        C[Context] --> A[Agent Controller]
+        A <--> L[LLM Client]
+        A --> R[Tool Router]
+        R --> T[本地工具]
+        T -->|Tool Result| C
+    end
+    subgraph MEM[Traceable Memory]
+        direction LR
+        Q[Memory Retriever] <--> D[(SQLite · L0–L3)]
+        W[Trace Recorder] --> D
+    end
+    U --> Q --> C
+    A --> W
+
+    classDef entry fill:#e5ece8,stroke:#56645d,color:#202124;
+    classDef runtime fill:#f4f4f2,stroke:#6b6f72,color:#202124;
+    classDef memory fill:#edf0ee,stroke:#727b76,color:#202124;
+    class U entry;
+    class C,A,L,R,T runtime;
+    class Q,W,D memory;
+    style CORE fill:#fafafa,stroke:#a5aaad,color:#34373a
+    style MEM fill:#f7f8f7,stroke:#a5aaad,color:#34373a
 ```
 
 大语言模型只提出动作，文件访问、命令执行和运行限制均由本地 Runtime 控制。Tool Result 会
@@ -142,10 +157,22 @@ API Key 只从环境变量读取。`.env`、运行轨迹、记忆数据库和 Wo
 
 ## 运行
 
-不提供任务参数时进入交互模式：
+不提供任务参数时，程序先在命令行询问使用终端对话还是 Web UI：
+
+```text
+Choose an interface:
+  1. Terminal chat
+  2. Web UI
+Select [1/2, default 1]:
+```
+
+它不会自动打开浏览器。选择 Web UI 后，终端会输出本地地址，由用户自行复制或点击访问。
+
+也可以通过参数跳过菜单：
 
 ```powershell
-trace-agent --workspace .\workspace --memory full
+trace-agent --interface terminal --workspace .\workspace --memory full
+trace-agent --interface web --workspace .\workspace --memory full
 ```
 
 可连续输入编程任务，前后轮共享短期上下文。以 `/` 开头的指令由本地 REPL 处理，不发送给
@@ -240,7 +267,7 @@ python -m pytest -q
 - 跨任务检索、L0 证据回溯和 `VERIFIES` 修改级来源边。
 - 持久 Session、多轮 REPL、本地斜杠指令和结构化任务报告。
 
-当前测试结果：`39 passed`。
+当前测试结果：`42 passed`。
 
 ## 真实模型端到端验证
 
