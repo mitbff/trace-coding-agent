@@ -52,6 +52,7 @@ class TaskReport:
     tool_executions: tuple[ToolExecution, ...] = ()
     changed_files: tuple[str, ...] = ()
     verification_commands: tuple[str, ...] = ()
+    retrieved_memories: tuple[str, ...] = ()
     error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -78,6 +79,7 @@ class TaskReport:
             ],
             "changed_files": list(self.changed_files),
             "verification_commands": list(self.verification_commands),
+            "retrieved_memories": list(self.retrieved_memories),
             "error": self.error,
         }
 

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Trace Coding Agent</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div><span class="mark">T</span><strong>Trace Coding Agent</strong></div>
+    <span id="health" class="pill">LOCAL SESSION</span>
+  </header>
+  <main>
+    <aside>
+      <section><h2>Session</h2><div id="session" class="facts"></div></section>
+      <section><h2>Tools</h2><div id="tools" class="tags"></div></section>
+      <section><h2>Memory</h2><div id="memory" class="facts"></div></section>
+    </aside>
+    <div class="center">
+      <div id="conversation" class="conversation"></div>
+      <form id="composer">
+        <textarea id="task" rows="3" placeholder="描述一个编程任务。Agent 将读取、修改并验证 Workspace 中的代码。"></textarea>
+        <div class="compose-row"><span>Enter 换行 · Ctrl+Enter 发送</span><button id="send">发送任务</button></div>
+      </form>
+    </div>
+    <aside class="evidence">
+      <section><h2>Task Report</h2><div id="report" class="empty">完成任务后显示</div></section>
+      <section><h2>Tool Calls</h2><div id="calls" class="empty">暂无工具调用</div></section>
+      <section><h2>Retrieved Memory</h2><div id="memories" class="empty">暂无召回记忆</div></section>
+      <section><div class="title-row"><h2>Workspace Diff</h2><button type="button" id="refresh-diff" class="ghost">刷新</button></div><pre id="diff">暂无改动</pre></section>
+    </aside>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

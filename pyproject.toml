@@ -14,11 +14,14 @@ dev = ["pytest>=8,<9"]
 
 [project.scripts]
 trace-agent = "trace_agent.cli:main"
+trace-agent-ui = "trace_agent.ui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"trace_agent.web" = ["*.html", "*.js", "*.css"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-

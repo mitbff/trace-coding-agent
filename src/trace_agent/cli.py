@@ -3,12 +3,8 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .config import Settings
-from .llm import OpenAIModelClient
-from .memory import MemoryService
+from .bootstrap import create_session
 from .repl import ChatREPL
-from .session import AgentSession
-from .tools import ToolRouter, ToolRuntime
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,34 +32,11 @@ def main() -> None:
             encoding="utf-8", errors="replace", line_buffering=True, write_through=True
         )
     args = build_parser().parse_args()
-    settings = Settings.from_env(args.workspace, args.max_steps)
-    runtime = ToolRuntime(
-        settings.workspace,
-        command_timeout=settings.command_timeout,
-        max_output_chars=settings.max_output_chars,
-    )
-    client = OpenAIModelClient(
-        settings.api_key,
-        settings.model,
-        settings.base_url,
-        timeout=settings.api_timeout,
-        max_retries=settings.api_max_retries,
-    )
-    memory = None
-    if args.memory != "off":
-        try:
-            memory = MemoryService(
-                settings.workspace,
-                database=args.memory_db,
-                mode=args.memory,
-            )
-        except Exception as exc:
-            print(f"[MEMORY WARNING] memory initialization failed; continuing without memory: {exc}")
-    session = AgentSession(
-        client,
-        ToolRouter(runtime),
-        settings.max_steps,
-        memory=memory,
+    session = create_session(
+        args.workspace,
+        args.max_steps,
+        args.memory,
+        args.memory_db,
     )
     if args.task is None:
         raise SystemExit(ChatREPL(session).run())

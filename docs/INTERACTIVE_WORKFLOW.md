@@ -31,9 +31,16 @@ trace-agent --workspace .\workspace --memory full
 
 ## 本地控制指令
 
-`/help`、`/status`、`/tools`、`/memory`、`/diff` 和 `/quit` 由 REPL 本地分发，不占用模型
+`/help`、`/status`、`/tools`、`/memory`、`/diff`、`/report` 和 `/quit` 由 REPL 本地分发，不占用模型
 请求，也不会混入用户任务记忆。`/diff` 通过受控的 `run_command` 工具在 Workspace 中执行
 `git diff --no-ext-diff`，因此仍遵守固定工作目录、超时和输出截断规则。
+
+## Web UI 数据流
+
+`trace-agent-ui` 使用 Python 标准库启动仅监听本机的 HTTP 服务。页面通过 `/api/state`、
+`/api/send` 和 `/api/diff` 获取数据。HTTP 适配层只负责序列化，实际任务仍交给
+`AgentSession.send()`。右侧证据面板直接读取 TaskReport，因此展示的工具参数、返回值、Diff 和
+记忆来源与 Agent 实际执行记录一致。
 
 ## 结构化结果
 

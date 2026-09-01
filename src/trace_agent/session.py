@@ -51,14 +51,16 @@ class AgentSession:
         self.turn_count += 1
         started_at = utc_timestamp()
         executions: list[ToolExecution] = []
+        retrieved_memories: list[str] = []
         runtime = RuntimeState()
         memory_context = ""
         if self.memory:
             self.memory.begin_task(task)
             recalled = self.memory.retrieve(task)
             if recalled:
+                retrieved_memories = [item.as_context() for item in recalled]
                 memory_context = "[RETRIEVED PROJECT MEMORY]\n" + "\n\n".join(
-                    item.as_context() for item in recalled
+                    retrieved_memories
                 )
         if memory_context:
             self.messages.append(
@@ -85,7 +87,8 @@ class AgentSession:
                 if self.memory:
                     self.memory.finish_task(answer, "model_error")
                 return self._finish_result(
-                    task, answer, step, "model_error", started_at, executions, failed=True,
+                    task, answer, step, "model_error", started_at, executions,
+                    retrieved_memories, failed=True,
                     error=f"{type(exc).__name__}: {exc}",
                 )
 
@@ -108,7 +111,8 @@ class AgentSession:
                 if self.memory:
                     self.memory.finish_task(answer, "completed")
                 return self._finish_result(
-                    task, answer, step, "completed", started_at, executions
+                    task, answer, step, "completed", started_at, executions,
+                    retrieved_memories,
                 )
 
             for call in message.tool_calls:
@@ -150,6 +154,7 @@ class AgentSession:
             "step_limit",
             started_at,
             executions,
+            retrieved_memories,
             stopped_by_limit=True,
         )
 
@@ -161,6 +166,7 @@ class AgentSession:
         status: str,
         started_at: str,
         executions: list[ToolExecution],
+        retrieved_memories: list[str],
         *,
         failed: bool = False,
         stopped_by_limit: bool = False,
@@ -196,6 +202,7 @@ class AgentSession:
             tool_executions=tuple(executions),
             changed_files=changed_files,
             verification_commands=verification_commands,
+            retrieved_memories=tuple(retrieved_memories),
             error=error,
         )
         self.last_report = report

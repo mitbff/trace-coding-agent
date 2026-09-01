@@ -158,6 +158,7 @@ trace-agent --workspace .\workspace --memory full
 | `/tools` | 列出模型可调用的工具 |
 | `/memory` | 显示记忆模式、项目标识和本地数据库位置 |
 | `/diff` | 显示 Workspace 中尚未提交的 Git Diff |
+| `/report` | 显示最近一轮 TaskReport；`/report json` 输出完整 JSON |
 | `/quit` | 关闭 Session 并退出 |
 
 一次性任务模式仍可使用：
@@ -180,6 +181,21 @@ trace-agent "完成编程任务" --workspace .\workspace --memory off
 ```
 
 也可用 `--memory-db` 指定 SQLite 文件，用 `--max-steps` 调整最大模型轮数。
+
+## 演示 Web UI
+
+项目自带零额外依赖的本地 Web UI：
+
+```powershell
+trace-agent-ui --workspace .\workspace --memory full
+```
+
+浏览器访问 `http://127.0.0.1:8765`。界面包含多轮对话、Session 状态、工具列表、记忆配置、
+Tool Call 详情、召回记忆、Workspace Diff 和结构化 TaskReport。发送任务时，HTTP 层调用与命令行
+相同的持久化 `AgentSession`；文件权限、命令超时、验证门控和记忆构建没有另写一套逻辑。
+
+服务默认只监听本机回环地址。可用 `--port` 调整端口；演示时不建议将服务暴露到公网，因为
+Agent 拥有指定 Workspace 内的文件修改和命令执行能力。
 
 ## 跨任务记忆演示
 
@@ -224,7 +240,7 @@ python -m pytest -q
 - 跨任务检索、L0 证据回溯和 `VERIFIES` 修改级来源边。
 - 持久 Session、多轮 REPL、本地斜杠指令和结构化任务报告。
 
-当前测试结果：`35 passed`。
+当前测试结果：`39 passed`。
 
 ## 真实模型端到端验证
 
