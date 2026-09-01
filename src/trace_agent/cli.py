@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from .agent import Agent
 from .config import Settings
@@ -25,6 +26,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(
+            encoding="utf-8", errors="replace", line_buffering=True, write_through=True
+        )
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(
+            encoding="utf-8", errors="replace", line_buffering=True, write_through=True
+        )
     args = build_parser().parse_args()
     settings = Settings.from_env(args.workspace, args.max_steps)
     runtime = ToolRuntime(
@@ -32,7 +41,13 @@ def main() -> None:
         command_timeout=settings.command_timeout,
         max_output_chars=settings.max_output_chars,
     )
-    client = OpenAIModelClient(settings.api_key, settings.model, settings.base_url)
+    client = OpenAIModelClient(
+        settings.api_key,
+        settings.model,
+        settings.base_url,
+        timeout=settings.api_timeout,
+        max_retries=settings.api_max_retries,
+    )
     memory = None
     if args.memory != "off":
         try:
@@ -49,6 +64,8 @@ def main() -> None:
         settings.max_steps,
         memory=memory,
     ).run(args.task)
+    if result.failed:
+        raise SystemExit(1)
     raise SystemExit(2 if result.stopped_by_limit else 0)
 
 

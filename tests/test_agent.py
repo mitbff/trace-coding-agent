@@ -37,6 +37,11 @@ class FakeClient:
         return next(self.responses)
 
 
+class FailingClient:
+    def complete(self, messages, tools):
+        raise RuntimeError("gateway unavailable")
+
+
 class RecordingRouter:
     def __init__(self):
         self.calls = []
@@ -191,3 +196,15 @@ def test_repeated_failure_adds_structured_warning_on_third_attempt():
     assert outcome.steps == 4
     assert third_observation["role"] == "tool"
     assert "RepeatedActionWarning" in third_observation["content"]
+
+
+def test_model_error_returns_failed_result_and_finalizes_memory():
+    memory = RecordingMemory()
+
+    outcome = Agent(
+        FailingClient(), RecordingRouter(), trace=lambda _: None, memory=memory
+    ).run("Inspect")
+
+    assert outcome.failed is True
+    assert "gateway unavailable" in outcome.answer
+    assert memory.events[-1] == ("finish", "model_error")

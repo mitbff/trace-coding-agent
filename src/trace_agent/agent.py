@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
@@ -13,7 +14,20 @@ SYSTEM_PROMPT = """You are a coding agent working inside a local project workspa
 Inspect relevant files before editing. Use tools to make real changes and run an appropriate
 test or command after changing code. Treat tool errors as observations and recover when possible.
 When the task is complete, give a concise summary of changes and verification. Do not claim a
-command succeeded unless its tool result says exit_code is 0."""
+command succeeded unless its tool result says exit_code is 0. Refer to workspace files using
+relative paths only; do not invent absolute paths or clickable file links."""
+
+
+def system_prompt() -> str:
+    system = platform.system()
+    if system == "Windows":
+        shell_guidance = (
+            "The run_command tool uses Windows cmd.exe. Use Windows commands such as dir, "
+            "where, and type; do not use Unix-only commands such as pwd, find, sed, or head."
+        )
+    else:
+        shell_guidance = f"The run_command tool runs on {system}. Use commands valid for that platform."
+    return f"{SYSTEM_PROMPT}\n{shell_guidance}"
 
 
 @dataclass(frozen=True)
@@ -21,6 +35,7 @@ class AgentResult:
     answer: str
     steps: int
     stopped_by_limit: bool = False
+    failed: bool = False
 
 
 @dataclass
@@ -138,7 +153,7 @@ class Agent:
                     item.as_context() for item in recalled
                 )
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt()},
         ]
         if memory_context:
             messages.append(
@@ -156,7 +171,14 @@ class Agent:
 
         for step in range(1, self.max_steps + 1):
             self.trace(f"\n[STEP {step}]")
-            message = self.client.complete(messages, TOOL_SCHEMAS)
+            try:
+                message = self.client.complete(messages, TOOL_SCHEMAS)
+            except Exception as exc:
+                answer = f"Model request failed at step {step}: {type(exc).__name__}: {exc}"
+                self.trace(f"[MODEL ERROR]\n{answer}")
+                if self.memory:
+                    self.memory.finish_task(answer, "model_error")
+                return AgentResult(answer=answer, steps=step, failed=True)
             assistant_message = message.model_dump(exclude_none=True)
             messages.append(assistant_message)
 

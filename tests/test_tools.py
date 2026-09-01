@@ -121,6 +121,15 @@ def test_command_result_is_structured(tmp_path):
     assert response["result"]["stdout"].strip() == "42"
 
 
+def test_command_cannot_read_reserved_memory_data(tmp_path):
+    router = ToolRouter(ToolRuntime(tmp_path))
+
+    response = result(router, "run_command", {"command": "type .trace-agent\\memory.db"})
+
+    assert response["ok"] is False
+    assert "reserved runtime data" in response["error"]
+
+
 def test_invalid_tool_arguments_become_observation(tmp_path):
     router = ToolRouter(ToolRuntime(tmp_path))
 

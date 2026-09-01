@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import difflib
 import hashlib
+import locale
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -178,6 +179,9 @@ class ToolRuntime:
     def run_command(self, command: str) -> dict[str, Any]:
         if not command.strip():
             raise ToolError("command is empty")
+        normalized_command = command.replace("/", "\\").casefold()
+        if ".trace-agent" in normalized_command:
+            raise ToolError("command targets reserved runtime data")
         try:
             completed = subprocess.run(
                 command,
@@ -185,7 +189,7 @@ class ToolRuntime:
                 shell=True,
                 capture_output=True,
                 text=True,
-                encoding="utf-8",
+                encoding=locale.getpreferredencoding(False),
                 errors="replace",
                 timeout=self.command_timeout,
             )
