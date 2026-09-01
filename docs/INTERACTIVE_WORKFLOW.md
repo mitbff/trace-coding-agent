@@ -1,0 +1,62 @@
+# 交互式 Agent 工作流
+
+## 启动
+
+配置 `OPENAI_API_KEY` 与 `OPENAI_MODEL` 后，在项目根目录执行：
+
+```powershell
+trace-agent --workspace .\workspace --memory full
+```
+
+程序只创建一个 `AgentSession`。同一进程中的所有用户任务共享对话历史，每轮任务单独创建
+`RuntimeState` 和长期记忆任务。这样可以继续讨论上一轮代码，同时避免“待验证”状态和失败
+计数串到下一轮。
+
+## 一轮任务的执行路径
+
+```text
+用户输入
+  → 检索当前 Workspace 的长期记忆
+  → 将用户消息加入 Session Context
+  → 模型返回 Tool Call
+  → Tool Router 执行本地工具
+  → Tool Result 写回 Context 与 L0 轨迹
+  → 模型继续调用工具或返回答案
+  → 验证门控检查代码修改是否经过真实命令验证
+  → 构建 TaskReport，并归纳 L1–L3 记忆
+```
+
+用户随后输入的新任务会沿用已有 Context。模型请求暂时失败时，本轮生成
+`status=model_error` 的报告，Session 保持可用。
+
+## 本地控制指令
+
+`/help`、`/status`、`/tools`、`/memory`、`/diff` 和 `/quit` 由 REPL 本地分发，不占用模型
+请求，也不会混入用户任务记忆。`/diff` 通过受控的 `run_command` 工具在 Workspace 中执行
+`git diff --no-ext-diff`，因此仍遵守固定工作目录、超时和输出截断规则。
+
+## 结构化结果
+
+每次 `AgentSession.send()` 都返回 `AgentResult`。其中 `report` 是 `TaskReport`，主要字段包括：
+
+- `session_id`、`turn`、`task` 和 `status`；
+- `steps`、`started_at` 和 `finished_at`；
+- 每次工具执行的名称、参数、结果和错误；
+- 本轮改动文件与成功验证命令；
+- 最终回答和模型错误。
+
+```python
+result = session.send("修复配置解析并运行测试")
+print(result.report.to_json())
+```
+
+该对象可直接作为后续 Web UI 的任务详情数据，也可用于自动评测和演示中的执行证据展示。
+
+## 推荐演示顺序
+
+1. 用 `/status`、`/tools` 和 `/memory` 展示运行边界；
+2. 输入一个需要搜索、修改和测试的任务；
+3. 用 `/diff` 查看实际代码变化；
+4. 追问上一轮涉及的文件，展示短期上下文；
+5. 输入相关新任务，观察长期记忆检索；
+6. 用 `/quit` 正常结束 Session。

@@ -40,8 +40,12 @@ session.send("继续为非法端口补充校验")
 ```
 
 Session 提供稳定 `session_id`、`history()`、`clear_context()` 和 `close()`。模型请求失败会作为
-Assistant 错误消息保留在历史中，但不会关闭 Session，用户可以继续下一轮。当前一次性
-`Agent.run()` 作为兼容入口，内部委托给同一 Session 内核；交互式 Chat REPL 将在后续提交中接入。
+Assistant 错误消息保留在历史中，但不会关闭 Session，用户可以继续下一轮。一次性
+`Agent.run()` 作为兼容入口，内部委托给同一 Session 内核；交互式 REPL 直接复用该内核。
+
+每轮 `send()` 返回的 `AgentResult` 包含结构化 `TaskReport`，记录任务状态、起止时间、工具
+执行、改动文件、成功验证命令和错误。报告可通过 `result.report.to_json()` 交给 UI、评测脚本或
+日志系统，不需要解析终端文本。
 
 ## 本地工具
 
@@ -138,6 +142,26 @@ API Key 只从环境变量读取。`.env`、运行轨迹、记忆数据库和 Wo
 
 ## 运行
 
+不提供任务参数时进入交互模式：
+
+```powershell
+trace-agent --workspace .\workspace --memory full
+```
+
+可连续输入编程任务，前后轮共享短期上下文。以 `/` 开头的指令由本地 REPL 处理，不发送给
+模型：
+
+| 指令 | 功能 |
+|---|---|
+| `/help` | 显示本地指令说明 |
+| `/status` | 显示 Session、轮次、消息数、Workspace 和步数上限 |
+| `/tools` | 列出模型可调用的工具 |
+| `/memory` | 显示记忆模式、项目标识和本地数据库位置 |
+| `/diff` | 显示 Workspace 中尚未提交的 Git Diff |
+| `/quit` | 关闭 Session 并退出 |
+
+一次性任务模式仍可使用：
+
 ```powershell
 trace-agent "检查项目、修复错误并运行测试" --workspace .\workspace
 ```
@@ -198,8 +222,9 @@ python -m pytest -q
 - 成功测试晋升与失败测试隔离；
 - `trace` 模式和不同 Workspace 的记忆隔离；
 - 跨任务检索、L0 证据回溯和 `VERIFIES` 修改级来源边。
+- 持久 Session、多轮 REPL、本地斜杠指令和结构化任务报告。
 
-当前测试结果：`30 passed`。
+当前测试结果：`35 passed`。
 
 ## 真实模型端到端验证
 
