@@ -90,6 +90,7 @@ class MemoryConsolidator:
                     for change in atomic_nodes:
                         if change.node_type == "code_change":
                             self._edge(atomic.node_id, change.node_id, "VERIFIES", trace.task_id)
+                            self.store.mark_verified(change.node_id)
 
                 if succeeded and self._is_verification_command(command):
                     project_memory = MemoryNode(

@@ -57,7 +57,19 @@ class MemoryRetriever:
                 )
             )
         ranked.sort(key=lambda item: (-item.score, item.node.node_id))
-        return ranked[:limit]
+        deduplicated: list[RetrievedMemory] = []
+        seen_project_facts: set[tuple[str, str]] = set()
+        for item in ranked:
+            if item.node.layer == "L3":
+                fact_value = str(item.node.metadata.get("command") or item.node.content).casefold()
+                key = (item.node.node_type, fact_value)
+                if key in seen_project_facts:
+                    continue
+                seen_project_facts.add(key)
+            deduplicated.append(item)
+            if len(deduplicated) >= limit:
+                break
+        return deduplicated
 
     def _trace(self, root: MemoryNode, max_nodes: int = 20) -> list[TraceStep]:
         result = [TraceStep(root.node_id, root.layer, root.node_type, root.content)]
@@ -92,4 +104,3 @@ class MemoryRetriever:
             return 1.0 / (1.0 + days / 30.0)
         except ValueError:
             return 0.5
-

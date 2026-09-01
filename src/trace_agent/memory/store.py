@@ -165,6 +165,20 @@ class SQLiteMemoryStore:
                 ),
             )
 
+    def mark_verified(self, node_id: str) -> None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT metadata_json FROM nodes WHERE node_id = ?", (node_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(node_id)
+            metadata = json.loads(row["metadata_json"])
+            metadata["verified"] = True
+            connection.execute(
+                "UPDATE nodes SET metadata_json = ? WHERE node_id = ?",
+                (json.dumps(metadata, ensure_ascii=False, sort_keys=True), node_id),
+            )
+
     def put_entity(self, entity: Entity) -> None:
         with self._connection() as connection:
             connection.execute(
@@ -260,4 +274,3 @@ class SQLiteMemoryStore:
             version=int(row["version"]),
             metadata=json.loads(row["metadata_json"]),
         )
-

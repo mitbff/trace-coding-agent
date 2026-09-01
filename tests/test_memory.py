@@ -154,8 +154,22 @@ def test_successful_verification_links_to_precise_code_change(tmp_path):
     change = next(node for node in nodes if node.node_type == "code_change")
     verification = next(node for node in nodes if node.node_type == "successful_command")
     assert change.metadata["before_hash"] == "before123"
+    assert change.metadata["verified"] is True
     assert "return a / b" in change.metadata["diff"]
     assert any(
         node.node_id == change.node_id and relation == "VERIFIES"
         for node, relation in memory.store.outgoing(verification.node_id)
     )
+
+
+def test_retrieval_deduplicates_repeated_project_conventions(tmp_path):
+    memory = MemoryService(tmp_path, mode="full", trace=lambda _: None)
+    build_verified_task(memory)
+    build_verified_task(memory)
+
+    recalled = memory.retrieve("python pytest test command", limit=10)
+    conventions = [
+        item for item in recalled if item.node.layer == "L3" and item.node.node_type == "project_convention"
+    ]
+
+    assert len(conventions) == 1
