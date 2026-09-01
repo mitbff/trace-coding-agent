@@ -27,6 +27,22 @@ flowchart TD
 大语言模型只提出动作，文件访问、命令执行和运行限制均由本地 Runtime 控制。Tool Result 会
 作为观察写回 Context，Agent 据此继续执行，直到模型返回最终回答或达到最大轮数。
 
+## 持久会话内核
+
+`AgentSession` 在进程存活期间保存完整短期对话，包括用户消息、Assistant 消息、Tool Call 和
+Tool Result。连续调用 `send()` 时，后一轮可以看到前一轮上下文；每轮用户任务仍建立独立的
+长期记忆任务和 RuntimeState，避免验证状态或重复失败计数错误地跨任务传播。
+
+```python
+session = AgentSession(client, router, memory=memory)
+session.send("检查并修复配置加载错误")
+session.send("继续为非法端口补充校验")
+```
+
+Session 提供稳定 `session_id`、`history()`、`clear_context()` 和 `close()`。模型请求失败会作为
+Assistant 错误消息保留在历史中，但不会关闭 Session，用户可以继续下一轮。当前一次性
+`Agent.run()` 作为兼容入口，内部委托给同一 Session 内核；交互式 Chat REPL 将在后续提交中接入。
+
 ## 本地工具
 
 | 工具 | 功能 |
@@ -183,7 +199,7 @@ python -m pytest -q
 - `trace` 模式和不同 Workspace 的记忆隔离；
 - 跨任务检索、L0 证据回溯和 `VERIFIES` 修改级来源边。
 
-当前测试结果：`25 passed`。
+当前测试结果：`30 passed`。
 
 ## 真实模型端到端验证
 
