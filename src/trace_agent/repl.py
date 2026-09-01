@@ -52,6 +52,7 @@ class ChatREPL:
                 "  /tools   list tools available to the model\n"
                 "  /memory  show memory configuration\n"
                 "  /diff    show uncommitted workspace changes\n"
+                "  /report  show the latest structured task report\n"
                 "  /quit    close the session"
             )
         elif command == "/status":
@@ -94,6 +95,26 @@ class ChatREPL:
                         self.output(f"Diff unavailable: {detail}")
                     else:
                         self.output(result["stdout"].rstrip() or "No uncommitted changes.")
+        elif command == "/report":
+            report = self.session.last_report
+            if report is None:
+                self.output("No task report is available yet.")
+            elif argument.strip().casefold() == "json":
+                self.output(report.to_json())
+            elif argument.strip():
+                self.output("Usage: /report [json]")
+            else:
+                changed = ", ".join(report.changed_files) or "none"
+                verified = ", ".join(report.verification_commands) or "none"
+                self.output(
+                    f"Task report (turn {report.turn})\n"
+                    f"status={report.status}\n"
+                    f"steps={report.steps}\n"
+                    f"tool_calls={len(report.tool_executions)}\n"
+                    f"changed_files={changed}\n"
+                    f"verification={verified}\n"
+                    f"answer={report.answer}"
+                )
         elif command == "/quit":
             self.session.close()
             self.output("Session closed.")

@@ -11,6 +11,7 @@ class RecordingSession:
         self.turn_count = 0
         self.max_steps = 20
         self.memory = None
+        self.last_report = None
         runtime = type("Runtime", (), {"workspace": "C:/workspace"})()
         self.router = type(
             "Router",
@@ -85,7 +86,16 @@ def test_local_commands_do_not_reach_model_and_quit_cleanly():
     repl = ChatREPL(
         session,
         input_fn=scripted_input(
-            ["/help", "/status", "/tools", "/memory", "/diff", "/unknown", "/quit"]
+            [
+                "/help",
+                "/status",
+                "/tools",
+                "/memory",
+                "/diff",
+                "/report",
+                "/unknown",
+                "/quit",
+            ]
         ),
         output=output.append,
     )
@@ -98,4 +108,37 @@ def test_local_commands_do_not_reach_model_and_quit_cleanly():
     assert "read_file, run_command" in rendered
     assert "Memory: off" in rendered
     assert "No uncommitted changes." in rendered
+    assert "No task report is available yet." in rendered
     assert "Unknown command: /unknown" in rendered
+
+
+def test_report_command_renders_latest_report_and_json():
+    session = RecordingSession()
+    session.last_report = type(
+        "Report",
+        (),
+        {
+            "turn": 2,
+            "status": "completed",
+            "steps": 3,
+            "tool_executions": (1, 2),
+            "changed_files": ("app.py",),
+            "verification_commands": ("pytest",),
+            "answer": "Done.",
+            "to_json": lambda _self: '{"status":"completed"}',
+        },
+    )()
+    output = []
+    repl = ChatREPL(
+        session,
+        input_fn=scripted_input(["/report", "/report json", "/quit"]),
+        output=output.append,
+    )
+
+    repl.run()
+
+    rendered = "\n".join(output)
+    assert "Task report (turn 2)" in rendered
+    assert "changed_files=app.py" in rendered
+    assert "verification=pytest" in rendered
+    assert '{"status":"completed"}' in rendered
