@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any, Callable
 
 from .llm import ModelClient
-from .runtime import AgentMemory, AgentResult, RuntimeState, system_prompt
+from .runtime import (
+    AgentMemory,
+    AgentResult,
+    RuntimeState,
+    TaskReport,
+    ToolExecution,
+    system_prompt,
+    utc_timestamp,
+)
 from .tools import TOOL_SCHEMAS, ToolRouter
 
 
@@ -31,6 +40,7 @@ class AgentSession:
         ]
         self.turn_count = 0
         self.closed = False
+        self.last_report: TaskReport | None = None
 
     def send(self, task: str) -> AgentResult:
         if self.closed:
@@ -39,6 +49,8 @@ class AgentSession:
             raise ValueError("task must not be empty")
 
         self.turn_count += 1
+        started_at = utc_timestamp()
+        executions: list[ToolExecution] = []
         runtime = RuntimeState()
         memory_context = ""
         if self.memory:
@@ -72,7 +84,10 @@ class AgentSession:
                 self.trace(f"[MODEL ERROR]\n{answer}")
                 if self.memory:
                     self.memory.finish_task(answer, "model_error")
-                return AgentResult(answer=answer, steps=step, failed=True)
+                return self._finish_result(
+                    task, answer, step, "model_error", started_at, executions, failed=True,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
 
             assistant_message = message.model_dump(exclude_none=True)
             self.messages.append(assistant_message)
@@ -92,7 +107,9 @@ class AgentSession:
                 self.trace(f"[FINAL]\n{answer}")
                 if self.memory:
                     self.memory.finish_task(answer, "completed")
-                return AgentResult(answer=answer, steps=step)
+                return self._finish_result(
+                    task, answer, step, "completed", started_at, executions
+                )
 
             for call in message.tool_calls:
                 self.trace(f"[TOOL CALL] {call.function.name} {call.function.arguments}")
@@ -104,6 +121,11 @@ class AgentSession:
                 result = self.router.execute(call.function.name, call.function.arguments)
                 result = runtime.observe(
                     step, call.function.name, call.function.arguments, result
+                )
+                executions.append(
+                    self._tool_execution(
+                        step, call.id, call.function.name, call.function.arguments, result
+                    )
                 )
                 self.trace(f"[TOOL RESULT] {result}")
                 if self.memory:
@@ -121,7 +143,94 @@ class AgentSession:
         self.trace(f"[STOPPED]\n{answer}")
         if self.memory:
             self.memory.finish_task(answer, "step_limit")
-        return AgentResult(answer=answer, steps=self.max_steps, stopped_by_limit=True)
+        return self._finish_result(
+            task,
+            answer,
+            self.max_steps,
+            "step_limit",
+            started_at,
+            executions,
+            stopped_by_limit=True,
+        )
+
+    def _finish_result(
+        self,
+        task: str,
+        answer: str,
+        steps: int,
+        status: str,
+        started_at: str,
+        executions: list[ToolExecution],
+        *,
+        failed: bool = False,
+        stopped_by_limit: bool = False,
+        error: str | None = None,
+    ) -> AgentResult:
+        changed_files = tuple(
+            dict.fromkeys(
+                item.result["path"]
+                for item in executions
+                if item.ok
+                and item.name in {"write_file", "replace_text"}
+                and item.result.get("changed", True)
+                and item.result.get("path")
+            )
+        )
+        verification_commands = tuple(
+            item.result["command"]
+            for item in executions
+            if item.ok
+            and item.name == "run_command"
+            and item.result.get("exit_code") == 0
+            and RuntimeState._is_verification_command(str(item.result.get("command", "")))
+        )
+        report = TaskReport(
+            session_id=self.session_id,
+            turn=self.turn_count,
+            task=task,
+            status=status,
+            answer=answer,
+            steps=steps,
+            started_at=started_at,
+            finished_at=utc_timestamp(),
+            tool_executions=tuple(executions),
+            changed_files=changed_files,
+            verification_commands=verification_commands,
+            error=error,
+        )
+        self.last_report = report
+        return AgentResult(
+            answer=answer,
+            steps=steps,
+            stopped_by_limit=stopped_by_limit,
+            failed=failed,
+            report=report,
+        )
+
+    @staticmethod
+    def _tool_execution(
+        step: int, call_id: str, name: str, arguments_json: str, result_json: str
+    ) -> ToolExecution:
+        try:
+            arguments = json.loads(arguments_json or "{}")
+        except json.JSONDecodeError:
+            arguments = {"raw": arguments_json}
+        try:
+            payload = json.loads(result_json)
+        except json.JSONDecodeError:
+            payload = {"ok": False, "error": "tool returned invalid JSON", "raw": result_json}
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            result = {}
+        return ToolExecution(
+            step=step,
+            call_id=call_id,
+            name=name,
+            arguments=arguments if isinstance(arguments, dict) else {"value": arguments},
+            ok=bool(payload.get("ok")),
+            result=result,
+            error=str(payload["error"]) if payload.get("error") is not None else None,
+        )
 
     def clear_context(self) -> None:
         self.messages = [{"role": "system", "content": system_prompt()}]
@@ -131,4 +240,3 @@ class AgentSession:
 
     def history(self) -> list[dict[str, Any]]:
         return [dict(message) for message in self.messages]
-

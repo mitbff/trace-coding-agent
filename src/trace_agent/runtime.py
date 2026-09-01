@@ -4,6 +4,7 @@ import json
 import platform
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
 
@@ -28,11 +29,73 @@ def system_prompt() -> str:
 
 
 @dataclass(frozen=True)
+class ToolExecution:
+    step: int
+    call_id: str
+    name: str
+    arguments: dict[str, Any]
+    ok: bool
+    result: dict[str, Any]
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class TaskReport:
+    session_id: str
+    turn: int
+    task: str
+    status: str
+    answer: str
+    steps: int
+    started_at: str
+    finished_at: str
+    tool_executions: tuple[ToolExecution, ...] = ()
+    changed_files: tuple[str, ...] = ()
+    verification_commands: tuple[str, ...] = ()
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "session_id": self.session_id,
+            "turn": self.turn,
+            "task": self.task,
+            "status": self.status,
+            "answer": self.answer,
+            "steps": self.steps,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "tool_executions": [
+                {
+                    "step": item.step,
+                    "call_id": item.call_id,
+                    "name": item.name,
+                    "arguments": item.arguments,
+                    "ok": item.ok,
+                    "result": item.result,
+                    "error": item.error,
+                }
+                for item in self.tool_executions
+            ],
+            "changed_files": list(self.changed_files),
+            "verification_commands": list(self.verification_commands),
+            "error": self.error,
+        }
+
+    def to_json(self, *, indent: int | None = 2) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent)
+
+
+@dataclass(frozen=True)
 class AgentResult:
     answer: str
     steps: int
     stopped_by_limit: bool = False
     failed: bool = False
+    report: TaskReport | None = None
+
+
+def utc_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 @dataclass
@@ -122,4 +185,3 @@ class AgentMemory(Protocol):
         self, step: int, call_id: str, name: str, result: str, call_event_id: str
     ) -> None: ...
     def finish_task(self, answer: str, status: str) -> None: ...
-

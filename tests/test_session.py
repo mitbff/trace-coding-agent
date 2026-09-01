@@ -1,6 +1,14 @@
+import json
+
 from trace_agent.session import AgentSession
 
-from test_agent import FakeMessage, RecordingMemory, RecordingRouter
+from test_agent import (
+    FakeMessage,
+    RecordingMemory,
+    RecordingRouter,
+    ScriptedRouter,
+    tool_call,
+)
 
 
 class SequenceClient:
@@ -102,3 +110,51 @@ def test_closed_session_rejects_new_turns():
         assert "closed" in str(exc)
     else:
         raise AssertionError("closed session accepted a new task")
+
+
+def test_result_contains_structured_task_report_for_changes_and_verification():
+    client = SequenceClient(
+        [
+            FakeMessage(tool_calls=[tool_call("replace_text")]),
+            FakeMessage(tool_calls=[tool_call("run_command")]),
+            FakeMessage(content="Fixed and verified."),
+        ]
+    )
+    router = ScriptedRouter(
+        [
+            json.dumps(
+                {"ok": True, "result": {"path": "app.py", "changed": True}}
+            ),
+            json.dumps(
+                {"ok": True, "result": {"command": "pytest", "exit_code": 0}}
+            ),
+        ]
+    )
+    session = AgentSession(client, router, trace=lambda _: None)
+
+    result = session.send("Fix app.py")
+
+    assert result.report is session.last_report
+    assert result.report.status == "completed"
+    assert result.report.session_id == session.session_id
+    assert result.report.turn == 1
+    assert result.report.changed_files == ("app.py",)
+    assert result.report.verification_commands == ("pytest",)
+    assert [item.name for item in result.report.tool_executions] == [
+        "replace_text",
+        "run_command",
+    ]
+    payload = json.loads(result.report.to_json())
+    assert payload["task"] == "Fix app.py"
+    assert payload["changed_files"] == ["app.py"]
+
+
+def test_failed_result_report_records_model_error():
+    session = AgentSession(
+        SequenceClient([RuntimeError("offline")]), RecordingRouter(), trace=lambda _: None
+    )
+
+    result = session.send("Task")
+
+    assert result.report.status == "model_error"
+    assert result.report.error == "RuntimeError: offline"
