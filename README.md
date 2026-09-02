@@ -7,6 +7,48 @@ LangChain、LlamaIndex、OpenAI Agents SDK 等 Agent 框架。模型通过 Tool 
 读取、代码搜索、局部修改、文件写入和命令执行工具；Runtime 负责路径隔离、超时、错误观察、
 最大步数与修改后强制验证。
 
+## 总体架构
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#f3f4f2','primaryTextColor':'#202124','primaryBorderColor':'#70757a','lineColor':'#6b7075','clusterBkg':'#fafafa','clusterBorder':'#a8adb1'}}}%%
+flowchart LR
+  U[用户] --> UI[Terminal REPL / Web UI]
+
+  subgraph CORE[Local Agent Runtime]
+    S[AgentSession<br/>历史与上下文]
+    A[Agent Loop<br/>解析·路由·终止]
+    R[Tool Router]
+    G[Runtime Guard<br/>路径·超时·验证·取消]
+    UI --> S --> A
+    A --> R
+    G -. 约束 .-> A
+    G -. 约束 .-> R
+  end
+
+  A <-->|原生 Tool Calling| L[OpenAI-compatible LLM]
+  R --> T[6 个本地工具]
+  T <--> W[(Local Workspace)]
+  T -->|Tool Result| S
+
+  subgraph MEMORY[Traceable Memory]
+    M[Memory Service<br/>记录·归纳·检索]
+    D[(SQLite + FTS5<br/>L0–L3 Graph)]
+    M <--> D
+  end
+  S -->|任务轨迹| M
+  M -->|召回证据| S
+```
+
+| 组件 | 自行实现的职责 |
+|---|---|
+| `AgentSession` | 多轮历史、Context、Agent Loop、模型输出解析与终止 |
+| `ToolRouter / Runtime` | 6 个本地工具、参数解析、路径隔离、超时与错误观察 |
+| `RuntimeState` | 修改后强制验证、重复失败检测与执行状态 |
+| `MemoryService` | L0–L3 构建、实体关联、图回溯与 FTS5/BM25 检索 |
+| `TaskReport` | 工具调用、耗时、Diff、验证命令与记忆证据 |
+
+## 分层记忆与可追溯关系
+
 记忆使用 SQLite、FTS5/BM25 和图关系实现。L0 保存原始任务与工具证据，L1 提取代码变更和命令，
 L2 汇总任务情节，L3 保存已验证的项目约定。高层记忆均可沿 `DERIVED_FROM`、`SUMMARIZES`、
 `VERIFIES` 回溯到 L0。模型错误和取消任务只保留 L0，不参与默认检索。
