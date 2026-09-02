@@ -11,13 +11,29 @@
 
 body { font-size: 15px; background: var(--bg); }
 header, aside, form { background: #1d2028; }
-main { grid-template-columns: 250px minmax(480px, 1fr) 430px; }
+main { grid-template-columns: 220px minmax(520px, 1fr) 560px; }
 .center { position: relative; }
 section { padding: 19px; }
 h2 { font-size: 12px; }
 .message .content { padding: 15px 17px; font-size: 15px; line-height: 1.65; }
 .message.user .content { border-color: #596a83; }
 .message.assistant .content { border-color: #68788d; }
+.markdown-body { white-space: normal !important; }
+.markdown-body p { margin: 0 0 10px; }
+.markdown-body p:last-child { margin-bottom: 0; }
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5 { margin: 16px 0 8px; color: #f5f7fa; line-height: 1.35; }
+.markdown-body h3 { font-size: 18px; }
+.markdown-body h4 { font-size: 16px; }
+.markdown-body h5 { font-size: 15px; }
+.markdown-body ul,
+.markdown-body ol { margin: 8px 0 12px; padding-left: 24px; }
+.markdown-body li { margin: 4px 0; }
+.markdown-body code { padding: 2px 5px; border: 1px solid #414957; border-radius: 4px; background: #181c23; color: #dbe5f2; font: 13px/1.45 Consolas, monospace; }
+.markdown-body .md-code { max-height: 420px; margin: 12px 0; padding: 13px 15px; background: #151920; }
+.markdown-body .md-code code { padding: 0; border: 0; background: transparent; white-space: pre; }
+.markdown-body blockquote { margin: 10px 0; padding: 8px 12px; border-left: 3px solid #77869b; background: #20242c; color: #d5dae2; }
 textarea { min-height: 92px; font-size: 15px; }
 .tag, summary, pre, .event { font-size: 12.5px; }
 .mark, button:not(.danger) { background: #91a7c5; color: #151922; }

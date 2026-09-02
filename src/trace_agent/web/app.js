@@ -2,6 +2,60 @@ const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[char]));
+
+function inlineMarkdown(value) {
+  return value
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+}
+
+function markdown(value) {
+  const codeBlocks = [];
+  const source = String(value ?? '').replace(/```([\w-]*)\r?\n([\s\S]*?)```/g, (_match, language, code) => {
+    const token = `@@CODE_BLOCK_${codeBlocks.length}@@`;
+    codeBlocks.push(`<pre class="md-code"><code data-language="${esc(language)}">${esc(code.replace(/\s+$/, ''))}</code></pre>`);
+    return `\n${token}\n`;
+  });
+  const lines = esc(source).split(/\r?\n/);
+  const output = [];
+  let list = null;
+  const closeList = () => {
+    if (list) output.push(`</${list}>`);
+    list = null;
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) { closeList(); continue; }
+    if (/^@@CODE_BLOCK_\d+@@$/.test(trimmed)) {
+      closeList(); output.push(trimmed); continue;
+    }
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = heading[1].length + 2;
+      output.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+    const numbered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+    if (bullet || numbered) {
+      const type = bullet ? 'ul' : 'ol';
+      if (list !== type) { closeList(); output.push(`<${type}>`); list = type; }
+      output.push(`<li>${inlineMarkdown((bullet || numbered)[1])}</li>`);
+      continue;
+    }
+    closeList();
+    if (trimmed.startsWith('&gt; ')) {
+      output.push(`<blockquote>${inlineMarkdown(trimmed.slice(5))}</blockquote>`);
+    } else {
+      output.push(`<p>${inlineMarkdown(trimmed)}</p>`);
+    }
+  }
+  closeList();
+  return output.join('').replace(/@@CODE_BLOCK_(\d+)@@/g, (_match, index) => codeBlocks[Number(index)]);
+}
 let busy = false;
 let lastEventId = 0;
 let currentState = null;
@@ -27,7 +81,7 @@ function render(state) {
   ]);
   $('welcome').classList.toggle('hidden', state.conversation.length > 0);
   $('conversation').innerHTML = state.conversation.length
-    ? state.conversation.map(message => `<div class="message ${message.role}"><div class="role">${message.role === 'user' ? 'You' : 'Agent'}</div><div class="content">${esc(message.content)}</div></div>`).join('')
+    ? state.conversation.map(message => `<div class="message ${message.role}"><div class="role">${message.role === 'user' ? 'You' : 'Agent'}</div><div class="content markdown-body">${markdown(message.content)}</div></div>`).join('')
     : '';
   $('conversation').scrollTop = $('conversation').scrollHeight;
 

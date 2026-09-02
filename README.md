@@ -6,15 +6,13 @@
 
 GitHub：<https://github.com/mitbff/trace-coding-agent>
 
-## 项目解决什么问题
+## 项目概览
 
-普通的代码对话只能给出建议，缺少对真实执行过程的约束和记录。能够操作代码的 Agent 又会遇到三个具体问题：
+Trace Coding Agent 接收一项自然语言编程任务，在指定的本地 Workspace 中检查项目、搜索代码、修改文件并运行测试。任务结束后，界面给出代码 Diff、测试结果和完整工具轨迹。下一次处理同一项目时，Agent 可以检索此前形成的项目记忆，并沿来源关系查看这条记忆对应的原始修改和命令结果。
 
-1. 模型声称“已经修复”，但没有运行测试；
-2. 下一次任务不知道此前修改了什么，只能重新探索；
-3. 检索到的历史结论缺少来源，无法判断它来自成功测试、失败命令，还是模型自己的描述。
+项目提供两个操作入口：Terminal REPL 适合直接在命令行连续输入任务，Web UI 适合观察执行过程和演示。两者调用同一个 `AgentSession` 和同一组本地工具，拥有相同的代码编写能力；区别只在交互和信息呈现方式。
 
-Trace Coding Agent 将编程任务组织为一个可观察的执行闭环：
+一轮任务按下面的路径执行：
 
 ```text
 用户任务
@@ -27,7 +25,7 @@ Trace Coding Agent 将编程任务组织为一个可观察的执行闭环：
   → 构建 L0–L3 记忆与来源关系
 ```
 
-系统保存的不只是最终回答。代码 Diff、文件哈希、命令、退出码、测试输出和错误都会成为可查询的执行证据。
+每次文件修改和命令执行都由本地 Runtime 完成。代码 Diff、文件哈希、命令、退出码、测试输出和错误随 TaskReport 保存，并为后续记忆提供来源。
 
 ## 核心功能
 
@@ -49,6 +47,7 @@ Trace Coding Agent 将编程任务组织为一个可观察的执行闭环：
 模型只负责提出动作，不直接接触文件系统。`AgentSession` 维护上下文并驱动 Agent Loop，`ToolRouter` 校验工具参数，Runtime 在固定 Workspace 内执行操作，再把结构化 Tool Result 写回上下文。
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#f3f4f2','primaryTextColor':'#202124','primaryBorderColor':'#70757a','lineColor':'#6b7075','clusterBkg':'#fafafa','clusterBorder':'#a8adb1','secondaryColor':'#ecefed','tertiaryColor':'#ffffff','fontFamily':'Arial, sans-serif'}}}%%
 flowchart LR
   U[用户] --> UI[Terminal REPL / Web UI]
 
@@ -106,6 +105,7 @@ L1 successful_command ──VERIFIES──> L1 code_change
 | L3 项目知识 | 已验证的测试命令和项目约定 | 仅从可靠执行证据晋升 |
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#f3f4f2','primaryTextColor':'#202124','primaryBorderColor':'#70757a','lineColor':'#6b7075','clusterBkg':'#fafafa','clusterBorder':'#a8adb1','secondaryColor':'#ecefed','tertiaryColor':'#ffffff','fontFamily':'Arial, sans-serif'}}}%%
 flowchart TB
   L3[L3 项目知识<br/>已验证约定]
   L2[L2 任务情节<br/>目标 · 文件 · 命令 · 状态]
@@ -183,6 +183,15 @@ API Key 只从环境变量读取。`.env`、Workspace 内容、运行轨迹和�
 
 ## 快速开始
 
+Web UI 和 Terminal REPL 是同一个 Agent 的两种入口：
+
+| 入口 | 适合场景 | 是否能修改代码 | 执行过程 |
+|---|---|---|---|
+| Web UI | 项目演示、查看实时轨迹和记忆证据 | 可以 | 页面分区显示对话、Tool Call、Diff 和 TaskReport |
+| Terminal REPL | 本地开发、快速连续输入任务 | 可以 | 工具调用和最终结果直接打印在终端 |
+
+无论选择哪种入口，`--workspace` 都决定 Agent 实际读取和修改的目录。模型通过 `read_file`、`search_code`、`write_file`、`replace_text` 和 `run_command` 操作该目录。
+
 ### Web UI
 
 ```powershell
@@ -203,6 +212,14 @@ trace-agent --interface web --workspace .\workspace --memory full
 ```powershell
 trace-agent --interface terminal --workspace .\workspace --memory full
 ```
+
+启动后终端会出现任务输入提示。直接输入自然语言任务并回车，例如：
+
+```text
+检查项目，修复订单折扣计算错误，并运行完整测试。
+```
+
+Agent 随后在 `--workspace` 指定的目录中读取和修改文件，并把工具调用、测试输出和最终回答打印在当前终端。它不需要打开浏览器。如果命令总是进入网页端，请检查启动参数是否仍写着 `--interface web`；将其明确改为 `--interface terminal` 即可。
 
 REPL 本地指令不会发送给模型，也不会写入用户任务记忆：
 
