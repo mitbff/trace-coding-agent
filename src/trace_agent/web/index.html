@@ -14,9 +14,10 @@
   </header>
   <main>
     <aside>
-      <section><h2>Session</h2><div id="session" class="facts"></div></section>
-      <section><h2>Tools</h2><div id="tools" class="tags"></div></section>
-      <section><h2>Memory</h2><div id="memory" class="facts"></div></section>
+      <section><h2>会话状态</h2><div id="session" class="facts"></div></section>
+      <section><h2>可用工具</h2><div id="tools" class="tags"></div></section>
+      <section><h2>记忆配置</h2><div id="memory" class="facts"></div></section>
+      <section><h2>历史任务</h2><div id="reports" class="history"><div class="empty">暂无任务</div></div></section>
     </aside>
     <div class="center">
       <div id="conversation" class="conversation"></div>
@@ -26,11 +27,12 @@
       </form>
     </div>
     <aside class="evidence">
-      <section><h2>Live Activity</h2><div id="activity" class="activity"><div class="empty">等待任务</div></div></section>
-      <section><h2>Task Report</h2><div id="report" class="empty">完成任务后显示</div></section>
-      <section><h2>Tool Calls</h2><div id="calls" class="empty">暂无工具调用</div></section>
-      <section><h2>Retrieved Memory</h2><div id="memories" class="empty">暂无召回记忆</div></section>
-      <section><div class="title-row"><h2>Workspace Diff</h2><button type="button" id="refresh-diff" class="ghost">刷新</button></div><pre id="diff">暂无改动</pre></section>
+      <section><h2>实时执行</h2><div id="activity" class="activity"><div class="empty">等待任务</div></div></section>
+      <section><h2>任务报告</h2><div id="report" class="empty">完成任务后显示</div></section>
+      <section><h2>工具调用</h2><div id="calls" class="empty">暂无工具调用</div></section>
+      <section><h2>召回记忆</h2><div id="memories" class="empty">暂无召回记忆</div></section>
+      <section><h2>本轮文件变更</h2><div id="file-diffs" class="empty">暂无文件变更</div></section>
+      <section><div class="title-row"><h2>工作区总览</h2><button type="button" id="refresh-diff" class="ghost">刷新</button></div><pre id="diff">暂无改动</pre></section>
     </aside>
   </main>
   <script src="/app.js"></script>

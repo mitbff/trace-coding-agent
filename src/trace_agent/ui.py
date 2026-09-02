@@ -78,6 +78,7 @@ class AgentWebApp:
                 and message.get("content")
             ],
             "report": report.to_dict() if report else None,
+            "reports": [item.to_dict() for item in self.session.reports()],
         }
 
     def send(self, task: str) -> dict[str, Any]:

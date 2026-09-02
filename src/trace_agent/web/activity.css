@@ -21,3 +21,22 @@
 .event.tool_result { border-color: var(--green); }
 .event.memory { border-color: var(--orange); }
 .event.error, .event.cancelled { border-color: #d06b73; }
+
+.history-item {
+  display: block;
+  width: 100%;
+  margin: 5px 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  background: #15191f;
+  color: var(--text);
+  text-align: left;
+  font-weight: 400;
+}
+
+.history-item.active { border-color: var(--green); }
+.history-item small { display: block; color: var(--muted); }
+.verified { color: var(--green); }
+.failed, .unverified { color: #ef9a9a; }
+.not_required { color: var(--muted); }
+.diff-count { color: var(--green); }

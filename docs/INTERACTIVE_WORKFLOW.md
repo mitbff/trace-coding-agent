@@ -48,6 +48,10 @@ trace-agent --workspace .\workspace --memory full
 Call、Tool Result、记忆召回和验证要求。停止按钮设置协作式取消信号；当前模型请求或工具调用
 返回后，Session 在下一安全边界生成 `status=cancelled` 的 TaskReport。
 
+Session 保存进程内的 TaskReport 历史。界面可切换任意轮次，并恢复该轮工具调用、耗时、召回
+记忆和文件 Diff。验证状态分为 `verified`、`failed`、`unverified` 与 `not_required`，由实际修改和
+命令结果推导。
+
 ## 结构化结果
 
 每次 `AgentSession.send()` 都返回 `AgentResult`。其中 `report` 是 `TaskReport`，主要字段包括：

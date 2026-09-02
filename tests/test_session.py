@@ -123,7 +123,14 @@ def test_result_contains_structured_task_report_for_changes_and_verification():
     router = ScriptedRouter(
         [
             json.dumps(
-                {"ok": True, "result": {"path": "app.py", "changed": True}}
+                {
+                    "ok": True,
+                    "result": {
+                        "path": "app.py",
+                        "changed": True,
+                        "diff": "--- a/app.py\n+++ b/app.py\n-old\n+new\n",
+                    },
+                }
             ),
             json.dumps(
                 {"ok": True, "result": {"command": "pytest", "exit_code": 0}}
@@ -147,6 +154,19 @@ def test_result_contains_structured_task_report_for_changes_and_verification():
     payload = json.loads(result.report.to_json())
     assert payload["task"] == "Fix app.py"
     assert payload["changed_files"] == ["app.py"]
+    assert payload["verification_status"] == "verified"
+    assert payload["file_diffs"] == [
+        {
+            "path": "app.py",
+            "diff": "--- a/app.py\n+++ b/app.py\n-old\n+new\n",
+            "additions": 1,
+            "deletions": 1,
+        }
+    ]
+    assert result.report.tool_executions[0].duration_ms >= 0
+    assert result.report.tool_executions[0].started_at
+    assert result.report.tool_executions[0].finished_at
+    assert session.reports() == [result.report]
 
 
 def test_failed_result_report_records_model_error():

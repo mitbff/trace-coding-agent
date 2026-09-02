@@ -218,7 +218,8 @@ trace-agent-ui --workspace .\workspace --memory full
 ```
 
 浏览器访问 `http://127.0.0.1:8765`。界面包含多轮对话、实时执行轨迹、Session 状态、工具列表、
-Tool Call 详情、召回记忆、Workspace Diff 和结构化 TaskReport，并可请求安全停止任务。发送任务时，HTTP 层调用与命令行
+历史 TaskReport、Tool Call 详情与耗时、召回记忆、按文件分组的 Diff、验证状态和 Workspace
+总览，并可请求安全停止任务。发送任务时，HTTP 层调用与命令行
 相同的持久化 `AgentSession`；文件权限、命令超时、验证门控和记忆构建没有另写一套逻辑。
 
 服务默认只监听本机回环地址。可用 `--port` 调整端口；演示时不建议将服务暴露到公网，因为
@@ -267,7 +268,7 @@ python -m pytest -q
 - 跨任务检索、L0 证据回溯和 `VERIFIES` 修改级来源边。
 - 持久 Session、多轮 REPL、本地斜杠指令和结构化任务报告。
 
-当前测试结果：`46 passed`。
+当前测试结果：`48 passed`。
 
 ## 真实模型端到端验证
 

@@ -37,6 +37,9 @@ class ToolExecution:
     ok: bool
     result: dict[str, Any]
     error: str | None = None
+    started_at: str = ""
+    finished_at: str = ""
+    duration_ms: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,7 @@ class TaskReport:
     changed_files: tuple[str, ...] = ()
     verification_commands: tuple[str, ...] = ()
     retrieved_memories: tuple[str, ...] = ()
+    verification_status: str = "not_required"
     error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -74,17 +78,48 @@ class TaskReport:
                     "ok": item.ok,
                     "result": item.result,
                     "error": item.error,
+                    "started_at": item.started_at,
+                    "finished_at": item.finished_at,
+                    "duration_ms": item.duration_ms,
                 }
                 for item in self.tool_executions
             ],
             "changed_files": list(self.changed_files),
             "verification_commands": list(self.verification_commands),
             "retrieved_memories": list(self.retrieved_memories),
+            "verification_status": self.verification_status,
+            "file_diffs": self.file_diffs(),
             "error": self.error,
         }
 
     def to_json(self, *, indent: int | None = 2) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent)
+
+    def file_diffs(self) -> list[dict[str, Any]]:
+        grouped: dict[str, dict[str, Any]] = {}
+        for execution in self.tool_executions:
+            path = str(execution.result.get("path", ""))
+            diff = str(execution.result.get("diff", ""))
+            if not path or not diff:
+                continue
+            item = grouped.setdefault(
+                path, {"path": path, "diffs": [], "additions": 0, "deletions": 0}
+            )
+            item["diffs"].append(diff)
+            for line in diff.splitlines():
+                if line.startswith("+") and not line.startswith("+++"):
+                    item["additions"] += 1
+                elif line.startswith("-") and not line.startswith("---"):
+                    item["deletions"] += 1
+        return [
+            {
+                "path": item["path"],
+                "diff": "\n".join(item["diffs"]),
+                "additions": item["additions"],
+                "deletions": item["deletions"],
+            }
+            for item in grouped.values()
+        ]
 
 
 @dataclass(frozen=True)

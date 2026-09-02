@@ -8,7 +8,18 @@ from trace_agent.ui import AgentWebApp, make_handler
 
 class FakeReport:
     def to_dict(self):
-        return {"status": "completed", "tool_executions": [], "retrieved_memories": []}
+        return {
+            "turn": 1,
+            "task": "Fix app.py",
+            "status": "completed",
+            "steps": 1,
+            "changed_files": [],
+            "verification_commands": [],
+            "verification_status": "not_required",
+            "tool_executions": [],
+            "retrieved_memories": [],
+            "file_diffs": [],
+        }
 
 
 class FakeSession:
@@ -46,6 +57,9 @@ class FakeSession:
     def history(self):
         return [dict(message) for message in self.messages]
 
+    def reports(self):
+        return [self.last_report] if self.last_report else []
+
     def send(self, task):
         self.turn_count += 1
         self.messages.extend(
@@ -73,6 +87,7 @@ def test_web_app_state_exposes_session_conversation_tools_and_report():
     assert state["memory"]["mode"] == "off"
     assert [item["role"] for item in state["conversation"]] == ["user", "assistant"]
     assert state["report"]["status"] == "completed"
+    assert len(state["reports"]) == 1
 
 
 def test_web_app_rejects_empty_task_and_returns_workspace_diff():

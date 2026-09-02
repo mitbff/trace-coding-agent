@@ -4,6 +4,8 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
 }[char]));
 let busy = false;
 let lastEventId = 0;
+let currentState = null;
+let selectedTurn = null;
 
 function facts(items) {
   return items.map(([key, value]) =>
@@ -12,37 +14,62 @@ function facts(items) {
 }
 
 function render(state) {
+  currentState = state;
   $('session').innerHTML = facts([
-    ['ID', state.session.id], ['Turns', state.session.turns],
-    ['Messages', state.session.messages], ['Max steps', state.session.max_steps],
-    ['Workspace', state.session.workspace]
+    ['标识', state.session.id], ['任务轮次', state.session.turns],
+    ['上下文消息', state.session.messages], ['步数上限', state.session.max_steps],
+    ['工作区', state.session.workspace]
   ]);
   $('tools').innerHTML = state.tools.map(item => `<span class="tag">${esc(item)}</span>`).join('');
   $('memory').innerHTML = facts([
-    ['Mode', state.memory.mode], ['Project', state.memory.project || '—'],
-    ['Database', state.memory.database || '—']
+    ['模式', state.memory.mode], ['项目', state.memory.project || '—'],
+    ['数据库', state.memory.database || '—']
   ]);
   $('conversation').innerHTML = state.conversation.length
     ? state.conversation.map(message => `<div class="message ${message.role}"><div class="role">${message.role === 'user' ? 'You' : 'Agent'}</div><div class="content">${esc(message.content)}</div></div>`).join('')
     : '<div class="empty">输入任务以开始会话。</div>';
   $('conversation').scrollTop = $('conversation').scrollHeight;
 
-  const report = state.report;
+  if (selectedTurn === null && state.report) selectedTurn = state.report.turn;
+  $('reports').innerHTML = state.reports.length
+    ? [...state.reports].reverse().map(report => `<button class="history-item ${selectedTurn === report.turn ? 'active' : ''}" data-turn="${report.turn}">第 ${report.turn} 轮 · ${esc(report.status)}<small>${esc(report.task)}</small></button>`).join('')
+    : '<div class="empty">暂无任务</div>';
+  $('reports').querySelectorAll('.history-item').forEach(button => {
+    button.addEventListener('click', () => selectReport(Number(button.dataset.turn)));
+  });
+  const report = selectedTurn === null
+    ? state.report
+    : state.reports.find(item => item.turn === selectedTurn) || state.report;
+  renderReport(report);
+}
+
+function renderReport(report) {
   if (!report) {
     $('report').className = 'empty'; $('report').textContent = '完成任务后显示';
     $('calls').innerHTML = '暂无工具调用'; $('memories').innerHTML = '暂无召回记忆';
+    $('file-diffs').innerHTML = '暂无文件变更';
     return;
   }
+  selectedTurn = report.turn;
+  const verificationLabels = {
+    verified: '已验证', failed: '验证失败', unverified: '尚未验证', not_required: '无需验证'
+  };
   $('report').className = 'report-grid';
-  $('report').innerHTML = `<div class="metric"><small>Status</small><strong class="status-${esc(report.status)}">${esc(report.status)}</strong></div><div class="metric"><small>Steps</small><strong>${report.steps}</strong></div><div class="metric"><small>Changed</small><strong>${report.changed_files.length}</strong></div><div class="metric"><small>Verified</small><strong>${report.verification_commands.length}</strong></div>`;
+  $('report').innerHTML = `<div class="metric"><small>任务状态</small><strong class="status-${esc(report.status)}">${esc(report.status)}</strong></div><div class="metric"><small>执行步数</small><strong>${report.steps}</strong></div><div class="metric"><small>改动文件</small><strong>${report.changed_files.length}</strong></div><div class="metric"><small>验证状态</small><strong class="${esc(report.verification_status)}">${esc(verificationLabels[report.verification_status] || report.verification_status)}</strong></div>`;
   $('calls').innerHTML = report.tool_executions.length
-    ? report.tool_executions.map((item, index) => `<details><summary>${index + 1}. ${esc(item.name)} · ${item.ok ? 'OK' : 'ERROR'}</summary><pre>${esc(JSON.stringify({arguments: item.arguments, result: item.result, error: item.error}, null, 2))}</pre></details>`).join('')
+    ? report.tool_executions.map((item, index) => `<details><summary>${index + 1}. ${esc(item.name)} · ${item.ok ? '成功' : '错误'} · ${Number(item.duration_ms || 0).toFixed(1)} ms</summary><pre>${esc(JSON.stringify({arguments: item.arguments, result: item.result, error: item.error}, null, 2))}</pre></details>`).join('')
     : '<div class="empty">本轮没有工具调用</div>';
   $('memories').innerHTML = report.retrieved_memories.length
     ? report.retrieved_memories.map(item => `<div class="memory-card">${esc(item)}</div>`).join('')
     : '<div class="empty">本轮没有召回记忆</div>';
-  const diffs = report.tool_executions.filter(item => item.result?.diff).map(item => item.result.diff).join('\n');
-  if (diffs) $('diff').textContent = diffs;
+  $('file-diffs').innerHTML = report.file_diffs.length
+    ? report.file_diffs.map(item => `<details><summary>${esc(item.path)} · <span class="diff-count">+${item.additions}</span> / -${item.deletions}</summary><pre>${esc(item.diff)}</pre></details>`).join('')
+    : '<div class="empty">本轮没有文件变更</div>';
+}
+
+function selectReport(turn) {
+  selectedTurn = turn;
+  render(currentState);
 }
 
 function setRunning(running) {
@@ -85,7 +112,7 @@ async function send(event) {
   event.preventDefault();
   const task = $('task').value.trim();
   if (!task || busy) return;
-  setRunning(true); $('activity').innerHTML = '';
+  selectedTurn = null; setRunning(true); $('activity').innerHTML = '';
   try {
     const response = await fetch('/api/send', {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({task})
