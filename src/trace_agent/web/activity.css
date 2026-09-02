@@ -5,15 +5,17 @@
 }
 
 .activity {
-  max-height: 190px;
+  height: 42vh;
+  min-height: 320px;
+  max-height: 520px;
   overflow: auto;
 }
 
 .event {
-  margin: 5px 0;
-  padding: 5px 8px;
-  border-left: 2px solid #4e5965;
-  font: 11px/1.35 Consolas, monospace;
+  margin: 7px 0;
+  padding: 8px 10px;
+  border-left: 3px solid #4e5965;
+  font: 13px/1.5 Consolas, monospace;
   white-space: pre-wrap;
 }
 
@@ -40,3 +42,8 @@
 .failed, .unverified { color: #ef9a9a; }
 .not_required { color: var(--muted); }
 .diff-count { color: var(--green); }
+
+/* Give execution evidence enough room to remain legible during demos. */
+@media (min-width: 1051px) {
+  main { grid-template-columns: 210px minmax(420px, 1fr) 560px; }
+}
