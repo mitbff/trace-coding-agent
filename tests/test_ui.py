@@ -125,6 +125,8 @@ def test_http_ui_serves_assets_and_state_api():
         base = f"http://127.0.0.1:{server.server_port}"
         with urlopen(base + "/", timeout=2) as response:
             assert b"Trace Coding Agent" in response.read()
+        with urlopen(base + "/theme.css", timeout=2) as response:
+            assert b"memory-evidence" in response.read()
         with urlopen(base + "/api/state", timeout=2) as response:
             state = json.loads(response.read())
         assert state["session"]["id"] == "session-ui"

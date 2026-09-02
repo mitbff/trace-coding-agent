@@ -6,6 +6,7 @@
   <title>Trace Coding Agent</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/activity.css">
+  <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
   <header>
@@ -20,6 +21,16 @@
       <section><h2>历史任务</h2><div id="reports" class="history"><div class="empty">暂无任务</div></div></section>
     </aside>
     <div class="center">
+      <div id="welcome" class="welcome">
+        <div class="welcome-mark">T</div>
+        <h1>开始一个本地代码任务</h1>
+        <p>Agent 可以检查项目、运行命令、修改文件并验证结果。所有动作都会留下可追溯证据。</p>
+        <div class="suggestions">
+          <button type="button" class="suggestion" data-prompt="检查项目并运行测试，定位订单折扣计算错误，先不要修改代码。">检查项目并诊断测试失败</button>
+          <button type="button" class="suggestion" data-prompt="列出当前项目的主要文件，并说明它们之间的关系。">了解当前项目结构</button>
+          <button type="button" class="suggestion" data-prompt="查看历史项目记忆，并说明哪些经验有原始证据支持。">查看可追溯项目记忆</button>
+        </div>
+      </div>
       <div id="conversation" class="conversation"></div>
       <form id="composer">
         <textarea id="task" rows="3" placeholder="描述一个编程任务。Agent 将读取、修改并验证 Workspace 中的代码。"></textarea>
@@ -30,7 +41,7 @@
       <section><h2>实时执行</h2><div id="activity" class="activity"><div class="empty">等待任务</div></div></section>
       <section><h2>任务报告</h2><div id="report" class="empty">完成任务后显示</div></section>
       <section><h2>工具调用</h2><div id="calls" class="empty">暂无工具调用</div></section>
-      <section><h2>召回记忆</h2><div id="memories" class="empty">暂无召回记忆</div></section>
+      <section><h2>分层记忆证据</h2><div id="memories" class="empty">暂无召回记忆</div></section>
       <section><h2>本轮文件变更</h2><div id="file-diffs" class="empty">暂无文件变更</div></section>
       <section><div class="title-row"><h2>工作区总览</h2><button type="button" id="refresh-diff" class="ghost">刷新</button></div><pre id="diff">暂无改动</pre></section>
     </aside>

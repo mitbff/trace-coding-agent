@@ -56,6 +56,7 @@ class TaskReport:
     changed_files: tuple[str, ...] = ()
     verification_commands: tuple[str, ...] = ()
     retrieved_memories: tuple[str, ...] = ()
+    memory_evidence: tuple[dict[str, Any], ...] = ()
     verification_status: str = "not_required"
     error: str | None = None
 
@@ -87,6 +88,7 @@ class TaskReport:
             "changed_files": list(self.changed_files),
             "verification_commands": list(self.verification_commands),
             "retrieved_memories": list(self.retrieved_memories),
+            "memory_evidence": list(self.memory_evidence),
             "verification_status": self.verification_status,
             "file_diffs": self.file_diffs(),
             "error": self.error,

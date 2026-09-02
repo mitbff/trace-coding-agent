@@ -5,7 +5,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repository = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$target = [System.IO.Path]::GetFullPath((Join-Path $repository $Destination))
+$target = if ([System.IO.Path]::IsPathRooted($Destination)) {
+    [System.IO.Path]::GetFullPath($Destination)
+} else {
+    [System.IO.Path]::GetFullPath((Join-Path $repository $Destination))
+}
 $failures = [System.Collections.Generic.List[string]]::new()
 
 if (-not $env:OPENAI_API_KEY) { $failures.Add("OPENAI_API_KEY is not configured") }

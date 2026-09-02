@@ -63,6 +63,7 @@ def test_each_session_turn_creates_an_independent_memory_task():
         ("finish", "completed"),
         ("finish", "completed"),
     ]
+    assert session.last_report.memory_evidence[0]["layer"] == "unknown"
 
 
 def test_model_error_does_not_close_session():

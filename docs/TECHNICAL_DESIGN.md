@@ -222,6 +222,10 @@ trace-agent-ui --workspace .\workspace --memory full
 总览，并可请求安全停止任务。发送任务时，HTTP 层调用与命令行
 相同的持久化 `AgentSession`；文件权限、命令超时、验证门控和记忆构建没有另写一套逻辑。
 
+召回结果同时提供机器可读的节点层级、节点类型、分数、验证状态、TraceStep 和关联实体。Web UI
+将其显示为纵向来源链，并标出 `DERIVED_FROM`、`SUMMARIZES` 等关系及 File、Command、Test、
+Error 实体。该视图直接来自检索结果，不在前端推测来源关系。
+
 服务默认只监听本机回环地址。可用 `--port` 调整端口；演示时不建议将服务暴露到公网，因为
 Agent 拥有指定 Workspace 内的文件修改和命令执行能力。
 

@@ -1,14 +1,25 @@
 param(
-    [string]$Destination = "workspace/demo"
+    [string]$Destination = "workspace/demo",
+    [switch]$AllowExternal
 )
 
 $ErrorActionPreference = "Stop"
 $repository = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $workspaceRoot = [System.IO.Path]::GetFullPath((Join-Path $repository "workspace"))
-$target = [System.IO.Path]::GetFullPath((Join-Path $repository $Destination))
+$target = if ([System.IO.Path]::IsPathRooted($Destination)) {
+    [System.IO.Path]::GetFullPath($Destination)
+} else {
+    [System.IO.Path]::GetFullPath((Join-Path $repository $Destination))
+}
 $workspacePrefix = $workspaceRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
 if (-not $target.StartsWith($workspacePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "Demo destination must stay inside $workspaceRoot"
+    if (-not $AllowExternal) {
+        throw "Demo destination must stay inside $workspaceRoot unless -AllowExternal is explicit"
+    }
+    $targetRoot = [System.IO.Path]::GetPathRoot($target)
+    if ($target -eq $targetRoot) {
+        throw "Refusing to replace a drive root"
+    }
 }
 if ($target -eq $workspaceRoot) {
     throw "Refusing to replace the workspace root"

@@ -58,6 +58,7 @@ class AgentSession:
         started_at = utc_timestamp()
         executions: list[ToolExecution] = []
         retrieved_memories: list[str] = []
+        memory_evidence: list[dict[str, Any]] = []
         runtime = RuntimeState()
         memory_context = ""
         if self.memory:
@@ -65,6 +66,21 @@ class AgentSession:
             recalled = self.memory.retrieve(task)
             if recalled:
                 retrieved_memories = [item.as_context() for item in recalled]
+                memory_evidence = [
+                    item.as_evidence()
+                    if hasattr(item, "as_evidence")
+                    else {
+                        "node_id": "unknown",
+                        "layer": "unknown",
+                        "node_type": "memory",
+                        "content": item.as_context(),
+                        "score": 0.0,
+                        "verified": False,
+                        "entities": [],
+                        "trace": [],
+                    }
+                    for item in recalled
+                ]
                 memory_context = "[RETRIEVED PROJECT MEMORY]\n" + "\n\n".join(
                     retrieved_memories
                 )
@@ -84,7 +100,9 @@ class AgentSession:
 
         for step in range(1, self.max_steps + 1):
             if self._cancel_requested.is_set():
-                return self._cancel_result(task, step - 1, started_at, executions, retrieved_memories)
+                return self._cancel_result(
+                    task, step - 1, started_at, executions, retrieved_memories, memory_evidence
+                )
             self.trace(f"\n[STEP {step}]")
             try:
                 message = self.client.complete(self.messages, TOOL_SCHEMAS)
@@ -96,7 +114,7 @@ class AgentSession:
                     self.memory.finish_task(answer, "model_error")
                 return self._finish_result(
                     task, answer, step, "model_error", started_at, executions,
-                    retrieved_memories, failed=True,
+                    retrieved_memories, memory_evidence, failed=True,
                     error=f"{type(exc).__name__}: {exc}",
                 )
 
@@ -120,13 +138,13 @@ class AgentSession:
                     self.memory.finish_task(answer, "completed")
                 return self._finish_result(
                     task, answer, step, "completed", started_at, executions,
-                    retrieved_memories,
+                    retrieved_memories, memory_evidence,
                 )
 
             for call in message.tool_calls:
                 if self._cancel_requested.is_set():
                     return self._cancel_result(
-                        task, step, started_at, executions, retrieved_memories
+                        task, step, started_at, executions, retrieved_memories, memory_evidence
                     )
                 self.trace(f"[TOOL CALL] {call.function.name} {call.function.arguments}")
                 call_event_id = ""
@@ -172,6 +190,7 @@ class AgentSession:
             started_at,
             executions,
             retrieved_memories,
+            memory_evidence,
             stopped_by_limit=True,
         )
 
@@ -182,6 +201,7 @@ class AgentSession:
         started_at: str,
         executions: list[ToolExecution],
         retrieved_memories: list[str],
+        memory_evidence: list[dict[str, Any]],
     ) -> AgentResult:
         answer = "Task cancelled by the user."
         self.messages.append({"role": "assistant", "content": answer})
@@ -196,6 +216,7 @@ class AgentSession:
             started_at,
             executions,
             retrieved_memories,
+            memory_evidence,
             cancelled=True,
         )
 
@@ -208,6 +229,7 @@ class AgentSession:
         started_at: str,
         executions: list[ToolExecution],
         retrieved_memories: list[str],
+        memory_evidence: list[dict[str, Any]],
         *,
         failed: bool = False,
         stopped_by_limit: bool = False,
@@ -260,6 +282,7 @@ class AgentSession:
             changed_files=changed_files,
             verification_commands=verification_commands,
             retrieved_memories=tuple(retrieved_memories),
+            memory_evidence=tuple(memory_evidence),
             verification_status=verification_status,
             error=error,
         )

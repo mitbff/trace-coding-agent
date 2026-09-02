@@ -25,9 +25,10 @@ function render(state) {
     ['模式', state.memory.mode], ['项目', state.memory.project || '—'],
     ['数据库', state.memory.database || '—']
   ]);
+  $('welcome').classList.toggle('hidden', state.conversation.length > 0);
   $('conversation').innerHTML = state.conversation.length
     ? state.conversation.map(message => `<div class="message ${message.role}"><div class="role">${message.role === 'user' ? 'You' : 'Agent'}</div><div class="content">${esc(message.content)}</div></div>`).join('')
-    : '<div class="empty">输入任务以开始会话。</div>';
+    : '';
   $('conversation').scrollTop = $('conversation').scrollHeight;
 
   if (selectedTurn === null && state.report) selectedTurn = state.report.turn;
@@ -59,12 +60,25 @@ function renderReport(report) {
   $('calls').innerHTML = report.tool_executions.length
     ? report.tool_executions.map((item, index) => `<details><summary>${index + 1}. ${esc(item.name)} · ${item.ok ? '成功' : '错误'} · ${Number(item.duration_ms || 0).toFixed(1)} ms</summary><pre>${esc(JSON.stringify({arguments: item.arguments, result: item.result, error: item.error}, null, 2))}</pre></details>`).join('')
     : '<div class="empty">本轮没有工具调用</div>';
-  $('memories').innerHTML = report.retrieved_memories.length
-    ? report.retrieved_memories.map(item => `<div class="memory-card">${esc(item)}</div>`).join('')
-    : '<div class="empty">本轮没有召回记忆</div>';
+  $('memories').innerHTML = report.memory_evidence?.length
+    ? report.memory_evidence.map(renderMemoryEvidence).join('')
+    : '<div class="empty">本轮没有召回长期记忆</div>';
   $('file-diffs').innerHTML = report.file_diffs.length
     ? report.file_diffs.map(item => `<details><summary>${esc(item.path)} · <span class="diff-count">+${item.additions}</span> / -${item.deletions}</summary><pre>${esc(item.diff)}</pre></details>`).join('')
     : '<div class="empty">本轮没有文件变更</div>';
+}
+
+function renderMemoryEvidence(memory) {
+  const trace = (memory.trace || []).map((node, index) => {
+    const relation = index > 0
+      ? `<div class="trace-relation">↓ ${esc(node.relation || 'DERIVED_FROM')}</div>`
+      : '';
+    return `${relation}<div class="trace-node"><b>${esc(node.layer)}</b><span>${esc(node.node_type)}</span><p>${esc(node.content)}</p></div>`;
+  }).join('');
+  const entities = (memory.entities || []).map(entity =>
+    `<span class="entity-chip">${esc(entity.type)} · ${esc(entity.name)}</span>`
+  ).join('');
+  return `<div class="memory-evidence"><div class="memory-head"><strong>${esc(memory.layer)} · ${esc(memory.node_type)}</strong><small>${memory.verified ? '已有验证证据' : '未验证'} · score ${Number(memory.score || 0).toFixed(3)}</small></div><div class="trace-chain">${trace}</div>${entities ? `<div class="entity-list">${entities}</div>` : ''}</div>`;
 }
 
 function selectReport(turn) {
@@ -145,4 +159,10 @@ $('composer').addEventListener('submit', send);
 $('task').addEventListener('keydown', event => { if (event.key === 'Enter' && event.ctrlKey) send(event); });
 $('cancel').addEventListener('click', cancel);
 $('refresh-diff').addEventListener('click', diff);
+$('welcome').querySelectorAll('.suggestion').forEach(button => {
+  button.addEventListener('click', () => {
+    $('task').value = button.dataset.prompt;
+    $('task').focus();
+  });
+});
 load(); diff(); setInterval(pollEvents, 700);

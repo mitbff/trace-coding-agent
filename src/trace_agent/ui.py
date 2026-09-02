@@ -132,7 +132,9 @@ def make_handler(app: AgentWebApp):
                 except ValueError:
                     after = 0
                 self._json(HTTPStatus.OK, app.events_after(after))
-            elif path in {"/", "/index.html", "/app.js", "/style.css", "/activity.css"}:
+            elif path in {
+                "/", "/index.html", "/app.js", "/style.css", "/activity.css", "/theme.css"
+            }:
                 name = "index.html" if path in {"/", "/index.html"} else path[1:]
                 self._asset(name)
             else:

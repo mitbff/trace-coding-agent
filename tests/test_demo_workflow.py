@@ -28,6 +28,8 @@ def test_demo_scripts_enforce_safe_reset_and_readiness_checks():
     check = (ROOT / "scripts" / "check_demo.ps1").read_text(encoding="utf-8")
 
     assert "Demo destination must stay inside" in prepare
+    assert "AllowExternal" in prepare
+    assert "Refusing to replace a drive root" in prepare
     assert "Refusing to replace the workspace root" in prepare
     assert "Expected the initial demo tests to fail" in prepare
     assert "OPENAI_API_KEY" in check

@@ -54,6 +54,11 @@ def test_full_memory_builds_layers_and_trace(tmp_path):
     assert recalled
     assert any("python -m pytest -q" in item.node.content for item in recalled)
     assert any(step.layer == "L0" for item in recalled for step in item.trace)
+    evidence = recalled[0].as_evidence()
+    assert evidence["layer"] in {"L1", "L2", "L3"}
+    assert evidence["trace"][0]["node_id"] == evidence["node_id"]
+    assert any(step["layer"] == "L0" for step in evidence["trace"])
+    assert all(set(entity) == {"type", "name"} for entity in evidence["entities"])
     test_result = next(
         node
         for node in memory.store.task_nodes(task_id, "L0")

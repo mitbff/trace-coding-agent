@@ -55,6 +55,7 @@ class RetrievedMemory:
     score: float
     trace: list[TraceStep]
     matched_entities: list[str] = field(default_factory=list)
+    entities: list[dict[str, str]] = field(default_factory=list)
 
     def as_context(self) -> str:
         sources = [step.node_id for step in self.trace if step.layer == "L0"]
@@ -65,3 +66,23 @@ class RetrievedMemory:
             f"{self.node.content}\nSource: {source_text}"
         )
 
+    def as_evidence(self) -> dict[str, Any]:
+        return {
+            "node_id": self.node.node_id,
+            "layer": self.node.layer,
+            "node_type": self.node.node_type,
+            "content": self.node.content,
+            "score": round(self.score, 4),
+            "verified": bool(self.node.metadata.get("verified")),
+            "entities": list(self.entities),
+            "trace": [
+                {
+                    "node_id": step.node_id,
+                    "layer": step.layer,
+                    "node_type": step.node_type,
+                    "content": step.content,
+                    "relation": step.relation_from_parent,
+                }
+                for step in self.trace
+            ],
+        }

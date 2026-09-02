@@ -56,6 +56,10 @@ class MemoryRetriever:
                     score=max(0.0, score),
                     trace=self._trace(node),
                     matched_entities=matched,
+                    entities=[
+                        {"type": entity.entity_type, "name": entity.name}
+                        for entity in entities
+                    ],
                 )
             )
         ranked.sort(key=lambda item: (-item.score, item.node.node_id))
