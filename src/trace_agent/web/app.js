@@ -16,8 +16,8 @@ function facts(items) {
 function render(state) {
   currentState = state;
   $('session').innerHTML = facts([
-    ['标识', state.session.id], ['任务轮次', state.session.turns],
-    ['上下文消息', state.session.messages], ['步数上限', state.session.max_steps],
+    ['标识', state.session.id], ['已完成任务', state.session.turns],
+    ['上下文消息', state.session.messages], ['单任务步数上限', state.session.max_steps],
     ['工作区', state.session.workspace]
   ]);
   $('tools').innerHTML = state.tools.map(item => `<span class="tag">${esc(item)}</span>`).join('');
