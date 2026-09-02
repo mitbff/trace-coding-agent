@@ -44,7 +44,9 @@ trace-agent --workspace .\workspace --memory full
 `trace-agent-ui` 使用 Python 标准库启动仅监听本机的 HTTP 服务。页面通过 `/api/state`、
 `/api/send` 和 `/api/diff` 获取数据。HTTP 适配层只负责序列化，实际任务仍交给
 `AgentSession.send()`。右侧证据面板直接读取 TaskReport，因此展示的工具参数、返回值、Diff 和
-记忆来源与 Agent 实际执行记录一致。
+记忆来源与 Agent 实际执行记录一致。页面轮询实时事件接口，任务执行期间逐步显示 Step、Tool
+Call、Tool Result、记忆召回和验证要求。停止按钮设置协作式取消信号；当前模型请求或工具调用
+返回后，Session 在下一安全边界生成 `status=cancelled` 的 TaskReport。
 
 ## 结构化结果
 

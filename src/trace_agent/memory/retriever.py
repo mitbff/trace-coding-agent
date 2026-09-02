@@ -32,6 +32,8 @@ class MemoryRetriever:
         query_terms = set(tokens)
         ranked: list[RetrievedMemory] = []
         for node, raw_rank in candidates:
+            if node.metadata.get("status") in {"model_error", "cancelled"}:
+                continue
             entities = self.store.entities_for_node(node.node_id)
             matched = [entity.name for entity in entities if self._entity_match(entity.normalized_name, query_terms)]
             lexical = 1.0 / (1.0 + abs(raw_rank))

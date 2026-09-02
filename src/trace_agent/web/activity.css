@@ -1,0 +1,23 @@
+.danger {
+  margin-right: 7px;
+  background: #352023;
+  color: #ef9a9a;
+}
+
+.activity {
+  max-height: 190px;
+  overflow: auto;
+}
+
+.event {
+  margin: 5px 0;
+  padding: 5px 8px;
+  border-left: 2px solid #4e5965;
+  font: 11px/1.35 Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.event.tool_call { border-color: var(--blue); }
+.event.tool_result { border-color: var(--green); }
+.event.memory { border-color: var(--orange); }
+.event.error, .event.cancelled { border-color: #d06b73; }

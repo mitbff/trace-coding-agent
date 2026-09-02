@@ -93,11 +93,31 @@ class AgentResult:
     steps: int
     stopped_by_limit: bool = False
     failed: bool = False
+    cancelled: bool = False
     report: TaskReport | None = None
 
 
 def utc_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def summarize_model_error(exc: Exception, step: int) -> str:
+    detail = str(exc)
+    match = re.search(r"(?:Error code:|HTTP)\s*(\d{3})", detail, re.IGNORECASE)
+    status = match.group(1) if match else None
+    reasons = {
+        "502": "the upstream model gateway returned an invalid response",
+        "503": "the upstream model service is unavailable",
+        "504": "the upstream model gateway timed out",
+        "524": "the upstream model did not respond before the gateway timeout",
+        "429": "the model service rate limit was reached",
+        "401": "the API credentials were rejected",
+        "403": "the API request was not authorized",
+    }
+    if status:
+        reason = reasons.get(status, "the model service returned an HTTP error")
+        return f"Model request failed at step {step}: HTTP {status}; {reason}."
+    return f"Model request failed at step {step}: {type(exc).__name__}: {detail[:240]}"
 
 
 @dataclass

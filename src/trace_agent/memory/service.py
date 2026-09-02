@@ -88,9 +88,13 @@ class MemoryService:
         try:
             self.recorder.final(current, answer, status)
             self.store.finish_task(current.task_id, status, utc_now())
-            if self.mode == "full":
+            if self.mode == "full" and status not in {"model_error", "cancelled"}:
                 episode = self.consolidator.consolidate(current, status)
                 self.trace_output(f"[MEMORY CONSOLIDATED] {episode.node_id}")
+            elif self.mode == "full":
+                self.trace_output(
+                    f"[MEMORY NOT PROMOTED] {current.task_id} status={status}; L0 evidence retained"
+                )
         except Exception as exc:
             self.trace_output(f"[MEMORY WARNING] task finalization failed: {exc}")
         finally:

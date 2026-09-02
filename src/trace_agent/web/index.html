@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Trace Coding Agent</title>
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/activity.css">
 </head>
 <body>
   <header>
@@ -21,10 +22,11 @@
       <div id="conversation" class="conversation"></div>
       <form id="composer">
         <textarea id="task" rows="3" placeholder="描述一个编程任务。Agent 将读取、修改并验证 Workspace 中的代码。"></textarea>
-        <div class="compose-row"><span>Enter 换行 · Ctrl+Enter 发送</span><button id="send">发送任务</button></div>
+        <div class="compose-row"><span id="run-state">Enter 换行 · Ctrl+Enter 发送</span><div><button type="button" id="cancel" class="danger" disabled>停止任务</button><button id="send">发送任务</button></div></div>
       </form>
     </div>
     <aside class="evidence">
+      <section><h2>Live Activity</h2><div id="activity" class="activity"><div class="empty">等待任务</div></div></section>
       <section><h2>Task Report</h2><div id="report" class="empty">完成任务后显示</div></section>
       <section><h2>Tool Calls</h2><div id="calls" class="empty">暂无工具调用</div></section>
       <section><h2>Retrieved Memory</h2><div id="memories" class="empty">暂无召回记忆</div></section>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import uuid
 from typing import Any, Callable
 
@@ -12,6 +13,7 @@ from .runtime import (
     TaskReport,
     ToolExecution,
     system_prompt,
+    summarize_model_error,
     utc_timestamp,
 )
 from .tools import TOOL_SCHEMAS, ToolRouter
@@ -41,6 +43,7 @@ class AgentSession:
         self.turn_count = 0
         self.closed = False
         self.last_report: TaskReport | None = None
+        self._cancel_requested = threading.Event()
 
     def send(self, task: str) -> AgentResult:
         if self.closed:
@@ -49,6 +52,7 @@ class AgentSession:
             raise ValueError("task must not be empty")
 
         self.turn_count += 1
+        self._cancel_requested.clear()
         started_at = utc_timestamp()
         executions: list[ToolExecution] = []
         retrieved_memories: list[str] = []
@@ -77,11 +81,13 @@ class AgentSession:
         self.trace(f"[USER]\n{task}")
 
         for step in range(1, self.max_steps + 1):
+            if self._cancel_requested.is_set():
+                return self._cancel_result(task, step - 1, started_at, executions, retrieved_memories)
             self.trace(f"\n[STEP {step}]")
             try:
                 message = self.client.complete(self.messages, TOOL_SCHEMAS)
             except Exception as exc:
-                answer = f"Model request failed at step {step}: {type(exc).__name__}: {exc}"
+                answer = summarize_model_error(exc, step)
                 self.messages.append({"role": "assistant", "content": answer})
                 self.trace(f"[MODEL ERROR]\n{answer}")
                 if self.memory:
@@ -116,6 +122,10 @@ class AgentSession:
                 )
 
             for call in message.tool_calls:
+                if self._cancel_requested.is_set():
+                    return self._cancel_result(
+                        task, step, started_at, executions, retrieved_memories
+                    )
                 self.trace(f"[TOOL CALL] {call.function.name} {call.function.arguments}")
                 call_event_id = ""
                 if self.memory:
@@ -158,6 +168,30 @@ class AgentSession:
             stopped_by_limit=True,
         )
 
+    def _cancel_result(
+        self,
+        task: str,
+        steps: int,
+        started_at: str,
+        executions: list[ToolExecution],
+        retrieved_memories: list[str],
+    ) -> AgentResult:
+        answer = "Task cancelled by the user."
+        self.messages.append({"role": "assistant", "content": answer})
+        self.trace(f"[CANCELLED]\n{answer}")
+        if self.memory:
+            self.memory.finish_task(answer, "cancelled")
+        return self._finish_result(
+            task,
+            answer,
+            steps,
+            "cancelled",
+            started_at,
+            executions,
+            retrieved_memories,
+            cancelled=True,
+        )
+
     def _finish_result(
         self,
         task: str,
@@ -170,6 +204,7 @@ class AgentSession:
         *,
         failed: bool = False,
         stopped_by_limit: bool = False,
+        cancelled: bool = False,
         error: str | None = None,
     ) -> AgentResult:
         changed_files = tuple(
@@ -211,8 +246,15 @@ class AgentSession:
             steps=steps,
             stopped_by_limit=stopped_by_limit,
             failed=failed,
+            cancelled=cancelled,
             report=report,
         )
+
+    def request_cancel(self) -> bool:
+        if self.closed:
+            return False
+        self._cancel_requested.set()
+        return True
 
     @staticmethod
     def _tool_execution(

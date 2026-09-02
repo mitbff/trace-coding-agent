@@ -158,3 +158,42 @@ def test_failed_result_report_records_model_error():
 
     assert result.report.status == "model_error"
     assert result.report.error == "RuntimeError: offline"
+
+
+def test_gateway_error_is_short_in_answer_but_full_in_report():
+    error = RuntimeError("Error code: 524 - a very long upstream diagnostic")
+    session = AgentSession(SequenceClient([error]), RecordingRouter(), trace=lambda _: None)
+
+    result = session.send("Task")
+
+    assert result.answer == (
+        "Model request failed at step 1: HTTP 524; "
+        "the upstream model did not respond before the gateway timeout."
+    )
+    assert "very long upstream diagnostic" in result.report.error
+
+
+def test_cancel_request_stops_between_tool_calls_and_reports_cancelled():
+    client = SequenceClient(
+        [FakeMessage(tool_calls=[tool_call("list_files"), tool_call("read_file")])]
+    )
+
+    class CancellingRouter:
+        def __init__(self):
+            self.calls = []
+            self.session = None
+
+        def execute(self, name, arguments):
+            self.calls.append(name)
+            self.session.request_cancel()
+            return '{"ok":true,"result":{"files":[]}}'
+
+    router = CancellingRouter()
+    session = AgentSession(client, router, trace=lambda _: None)
+    router.session = session
+
+    result = session.send("Inspect files")
+
+    assert result.cancelled is True
+    assert result.report.status == "cancelled"
+    assert router.calls == ["list_files"]

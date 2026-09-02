@@ -173,3 +173,18 @@ def test_retrieval_deduplicates_repeated_project_conventions(tmp_path):
     ]
 
     assert len(conventions) == 1
+
+
+def test_model_error_keeps_l0_evidence_without_promoting_retrievable_memory(tmp_path):
+    output = []
+    memory = MemoryService(tmp_path, mode="full", trace=output.append)
+    task_id = memory.begin_task("Fix safe_divide after gateway timeout")
+
+    memory.finish_task("Model request failed: HTTP 524", "model_error")
+
+    assert memory.store.task_nodes(task_id, "L0")
+    assert memory.store.task_nodes(task_id, "L1") == []
+    assert memory.store.task_nodes(task_id, "L2") == []
+    assert memory.store.task_nodes(task_id, "L3") == []
+    assert memory.retrieve("safe_divide gateway timeout") == []
+    assert any("MEMORY NOT PROMOTED" in line for line in output)

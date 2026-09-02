@@ -19,6 +19,8 @@ class FakeSession:
         self.closed = False
         self.memory = None
         self.last_report = None
+        self.trace = lambda _: None
+        self.cancel_requested = False
         self.messages = [{"role": "system", "content": "system"}]
         runtime = type("Runtime", (), {"workspace": "C:/demo"})()
         self.router = type(
@@ -54,6 +56,10 @@ class FakeSession:
         )
         self.last_report = FakeReport()
 
+    def request_cancel(self):
+        self.cancel_requested = True
+        return True
+
 
 def test_web_app_state_exposes_session_conversation_tools_and_report():
     session = FakeSession()
@@ -80,6 +86,20 @@ def test_web_app_rejects_empty_task_and_returns_workspace_diff():
         raise AssertionError("empty task was accepted")
 
     assert "diff --git" in app.diff()["diff"]
+
+
+def test_web_app_records_runtime_events_and_forwards_cancel_request():
+    session = FakeSession()
+    app = AgentWebApp(session)
+    app.record_event('[TOOL CALL] read_file {"path":"app.py"}')
+
+    events = app.events_after(0)
+
+    assert events["events"][0]["kind"] == "tool_call"
+    assert app.events_after(events["events"][0]["id"])["events"] == []
+    app.running = True
+    assert app.cancel()["requested"] is True
+    assert session.cancel_requested is True
 
 
 def test_http_ui_serves_assets_and_state_api():

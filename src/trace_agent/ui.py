@@ -4,11 +4,12 @@ import argparse
 import json
 import mimetypes
 import threading
+from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from .bootstrap import create_session
 from .session import AgentSession
@@ -20,6 +21,34 @@ class AgentWebApp:
     def __init__(self, session: AgentSession) -> None:
         self.session = session
         self.lock = threading.Lock()
+        self.event_lock = threading.Lock()
+        self.events: list[dict[str, Any]] = []
+        self.running = False
+        self._upstream_trace = session.trace
+        session.trace = self.record_event
+        if session.memory is not None:
+            session.memory.trace_output = self.record_event
+
+    def record_event(self, message: str) -> None:
+        kind = "runtime"
+        labels = {
+            "[USER]": "user", "[STEP": "step", "[TOOL CALL]": "tool_call",
+            "[TOOL RESULT]": "tool_result", "[MEMORY RETRIEVED]": "memory",
+            "[VERIFICATION REQUIRED]": "verification", "[FINAL]": "final",
+            "[MODEL ERROR]": "error", "[CANCELLED]": "cancelled",
+        }
+        for prefix, label in labels.items():
+            if message.lstrip().startswith(prefix):
+                kind = label
+                break
+        with self.event_lock:
+            self.events.append({
+                "id": len(self.events) + 1, "kind": kind, "message": message.strip(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+            if len(self.events) > 500:
+                self.events = self.events[-500:]
+        self._upstream_trace(message)
 
     def state(self) -> dict[str, Any]:
         memory = self.session.memory
@@ -32,6 +61,7 @@ class AgentWebApp:
                 "workspace": str(self.session.router.runtime.workspace),
                 "max_steps": self.session.max_steps,
                 "closed": self.session.closed,
+                "running": self.running,
             },
             "tools": list(self.session.router.tool_names),
             "memory": {
@@ -54,8 +84,23 @@ class AgentWebApp:
         if not isinstance(task, str) or not task.strip():
             raise ValueError("task must not be empty")
         with self.lock:
-            self.session.send(task.strip())
+            self.running = True
+            try:
+                self.session.send(task.strip())
+            finally:
+                self.running = False
             return self.state()
+
+    def cancel(self) -> dict[str, Any]:
+        requested = self.session.request_cancel() if self.running else False
+        if requested:
+            self.record_event("[CANCEL REQUESTED]\nWaiting for the current operation to return.")
+        return {"requested": requested, "running": self.running}
+
+    def events_after(self, event_id: int) -> dict[str, Any]:
+        with self.event_lock:
+            events = [event for event in self.events if event["id"] > event_id]
+        return {"events": events, "running": self.running}
 
     def diff(self) -> dict[str, Any]:
         payload = json.loads(
@@ -74,12 +119,19 @@ class AgentWebApp:
 def make_handler(app: AgentWebApp):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
-            path = urlparse(self.path).path
+            parsed = urlparse(self.path)
+            path = parsed.path
             if path == "/api/state":
                 self._json(HTTPStatus.OK, app.state())
             elif path == "/api/diff":
                 self._call(app.diff)
-            elif path in {"/", "/index.html", "/app.js", "/style.css"}:
+            elif path == "/api/events":
+                try:
+                    after = int(parse_qs(parsed.query).get("after", ["0"])[0])
+                except ValueError:
+                    after = 0
+                self._json(HTTPStatus.OK, app.events_after(after))
+            elif path in {"/", "/index.html", "/app.js", "/style.css", "/activity.css"}:
                 name = "index.html" if path in {"/", "/index.html"} else path[1:]
                 self._asset(name)
             else:
@@ -87,6 +139,9 @@ def make_handler(app: AgentWebApp):
 
         def do_POST(self) -> None:
             path = urlparse(self.path).path
+            if path == "/api/cancel":
+                self._json(HTTPStatus.OK, app.cancel())
+                return
             if path != "/api/send":
                 self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
                 return
